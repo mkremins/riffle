@@ -1,5 +1,5 @@
-(ns ceptre-clj.compiler
-  (:require [ceptre-clj.util :as util]))
+(ns riffle.compiler
+  (:require [riffle.util :as util]))
 
 
 ;;; the core of the typechecker
@@ -311,8 +311,8 @@
     )) ; TODO actually perform the check
 
 (defn compile-program
-  "Main entry point for the entire `ceptre-clj.compiler` namespace. Given a
-  valid `program`, compiles it and returns the resulting initial state."
+  "Main entry point for the entire `riffle.compiler` namespace. Given a valid
+  `program`, compiles it and returns the resulting initial state."
   [program]
   (println "Compiling program… ⚙️")
   (let [types  (compile-types  (:types  program))

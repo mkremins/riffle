@@ -1,4 +1,4 @@
-(ns ceptre-clj.examples)
+(ns riffle.examples)
 
 
 (def hello '{

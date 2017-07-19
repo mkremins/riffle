@@ -1,4 +1,4 @@
-(ns ceptre-clj.util)
+(ns riffle.util)
 
 (defn all-distinct?
   "Returns true IFF `coll` contains no duplicate items."

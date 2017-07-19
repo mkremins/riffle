@@ -1,8 +1,8 @@
-(ns ceptre-clj.core
+(ns riffle.core
   (:require [clojure.string :as str]
             [clojure.walk :as walk]
-            [ceptre-clj.compiler :as compiler]
-            [ceptre-clj.examples :as examples] ; for testing
+            [riffle.compiler :as compiler]
+            [riffle.examples :as examples] ; for testing
             ))
 
 
