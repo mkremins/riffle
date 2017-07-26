@@ -4,10 +4,151 @@
   <meta charset="UTF-8">
   <title>Riffle</title>
   <style>
+  /* reset defaults */
   * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+  }
+  html {
+    font-family: sans-serif;
+    font-size: 14px;
+  }
+  button {
+    font-size: inherit;
+    padding: 2px;
+  }
+  input[type="text"], textarea {
+    background: inherit;
+    border: none;
+    font-family: inherit;
+    font-size: inherit;
+    white-space: pre-wrap;
+  }
+  table {
+    border-collapse: collapse;
+  }
+  td:first-child {
+    font-weight: bold;
+    padding-right: 0.5rem;
+  }
+  tr:not(:last-child) td {
+    padding-bottom: 0.25rem;
+  }
+  /* basic page structure / layout */
+  body {
+    /*margin: 2rem;*/
+  }
+  .app {
+    display: flex;
+    flex-flow: row wrap;
+  }
+  .editor {
+    padding: 2rem;
+    width: 50%;
+  }
+  .program-info {
+    margin-bottom: 1.5rem;
+  }
+  .editor-section {
+    margin-bottom: 1rem;
+  }
+  .section-title {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+  }
+  .types  > .create-button,
+  .bwds   > .create-button,
+  .stages > .create-button {
+    /* a little extra, to match the 0.5 gained from margin-bottom on
+       block-final logic sentence lists in other sections */
+    margin-bottom: 0.5rem;
+  }
+  /* "decl-blocks" (top-level declarations that aren't logic sentences) */
+  .decl-block {
+    background: #eee;
+    border: 1px solid #aaa;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+  }
+  .decl-block .decl-block {
+    background: #ddd; /* nested decl-blocks get a darker background color */
+  }
+  .type, .case, .rule {
+    /* cancel out the 0.5 gained from margin-bottom on block-final logic
+       sentence lists */
+    padding-bottom: 0;
+  }
+  .decl-block .header {
+    font-size: 16px;
+    margin-bottom: 0.5rem;
+  }
+  .decl-block .header input[type="text"] {
+    font-weight: bold;
+    max-width: 95%; /* leave a little room on the right for the delete button */
+  }
+  .decl-block .header .delete-button {
+    float: right;
+  }
+  .decl-block table {
+    margin-bottom: 0.5rem;
+  }
+  /* rules */
+  .rule-description {
+    margin-bottom: 1rem;
+    resize: none;
+    width: 100%;
+  }
+  .rule-section:not(:last-child) {
+    margin-bottom: 0.5rem;
+  }
+  .rule-section .section-title {
+    margin-bottom: 0.25rem;
+  }
+  /* logic sentences */
+  .logic-sentence {
+    background: lightblue;
+    border: 1px dotted #777;
+    display: inline-block;
+    line-height: 1.5;
+    margin-bottom: 0.5rem;
+    margin-right: 0.5rem;
+    padding: 2px 0.25rem;
+  }
+  .logic-sentence .delete-button {
+    margin-left: 0.25rem;
+  }
+  .premise .toggle-consume {
+    color: #555;
+    cursor: pointer;
+    margin-right: 0.25rem;
+    text-decoration: underline;
+  }
+  /* player */
+  .player {
+    background: #eee;
+    padding: 2rem;
+    width: 50%;
+  }
+  .player .content, .player .choices {
+    font-family: Georgia, sans-serif;
+    font-size: 16px;
+  }
+  .player .controls, .player .choices, .player .content p {
+    margin-bottom: 1rem;
+  }
+  .player .choices {
+    margin-left: 1rem;
+  }
+  .player a {
+    color: blueviolet;
+    cursor: pointer;
+  }
+  .player a:hover {
+    text-decoration: underline;
+  }
+  .player .error {
+    color: red;
   }
   </style>
 </head>

@@ -1,10 +1,43 @@
-(ns riffle.core
+(ns riffle.engine
   (:require [clojure.string :as str]
             [clojure.walk :as walk]
-            [riffle.compiler :as compiler]
-            [riffle.examples :as examples] ; for testing
-            ))
+            [riffle.compiler :as compiler]))
 
+;;; general-purpose helper fns
+
+(defn current-stage
+  "Given a `state`, returns the currently active stage."
+  [state]
+  (let [stage (get (:stages state) (:stage state))]
+    (assert stage
+      (str "Stage " (:stage state) " not found!"))
+    stage))
+
+;;; expand template strings to player-presentable strings
+
+(defn expand-template
+  "Converts a `template` string (containing var names prefixed with the $
+  character) to a player-presentable string by replacing var names with their
+  associated values in `bindings`."
+  [template bindings]
+  (reduce (fn [s [var-name bound-value]]
+            (str/replace s (str \$ var-name) (str bound-value)))
+          template bindings))
+
+(defn choice-text
+  "Returns the player-presentable choice text for a state `transition`."
+  [transition]
+  (if-let [choice-text (:choice-text (:rule transition))]
+    (expand-template choice-text (:bindings transition))
+    (str (:name (:rule transition) "(quiescence)") " "
+         (->> (:bindings transition) (sort-by first) (map second) (str/join " ")))))
+
+(defn description
+  "Returns the player-presentable description of what happened in the game
+  world as the result of a state `transition`."
+  [transition]
+  (when-let [template (:description (:rule transition))]
+    (str/trim (expand-template template (:bindings transition)))))
 
 ;;; identify possible state transitions
 
@@ -90,14 +123,6 @@
                 (:check-bwd rule))]
     partial-matches))
 
-(defn current-stage
-  "Given a `state`, returns the currently active stage."
-  [state]
-  (let [stage (get (:stages state) (:stage state))]
-    (assert stage
-      (str "Stage " (:stage state) " not found!"))
-    stage))
-
 (defn possible-transitions
   "Given a `state`, returns a vector of possible state transitions."
   [state]
@@ -111,38 +136,20 @@
           "No applicable rules or quiescence rules for state!")
         quiescence-rule-applications))))
 
-
 ;;; select and apply a state transition
-
-(defn transition->str
-  "Converts a `transition` to a presentable string."
-  [transition]
-  (str (:name (:rule transition) "(quiescence)") " "
-       (->> (:bindings transition) (sort-by first) (map second) (str/join " "))))
-
-(defn interactively-select-transition [transitions]
-  (loop []
-    (doseq [[idx transition] (map vector (range) transitions)]
-      (println (str idx ":") (transition->str transition)))
-    (print "?- ")
-    (flush)
-    (let [input (read-line)
-          selected-idx (read-string input)]
-      (or (when (integer? selected-idx)
-            (get transitions selected-idx))
-          (do (println "Invalid index! Please select a valid index.")
-              (recur))))))
 
 (defn apply-transition
   "Applies `transition` to `state` and returns the resulting updated state."
   [state transition]
   (let [rule (:rule transition)
+        ;; remove :choices key from state
+        state' (dissoc state :choices)
         ;; remove consumed facts from (:facts state)
         consumed-facts
         (->> (:facts transition)
              (split-at (count (:consume rule)))
              (first))
-        state' (reduce #(update %1 :facts dissoc (:id %2)) state consumed-facts)
+        state' (reduce #(update %1 :facts dissoc (:id %2)) state' consumed-facts)
         ;; add new facts from (:results rule) to (:facts state)
         ;; TODO: should probably annotate these with causality info here
         next-fact-id (inc (apply max (keys (:facts state))))
@@ -155,26 +162,21 @@
         state' (reduce #(assoc-in %1 [:facts (:id %2)] %2) state' new-facts)
         ;; if rule was a quiescence rule, set the current stage to (:goto rule)
         stage' (:goto rule)
-        state' (cond-> state' stage' (assoc :stage stage'))]
+        state' (cond-> state' stage' (assoc :stage stage'))
+        ;; add the rule's description to our :content
+        desc   (description transition)
+        state' (cond-> state' desc (update :content (fnil conj []) desc))]
     state'))
 
-(defn select-transition
-  "Given a `state`, selects and returns a legal state transition."
+(defn run-to-choice-point
+  "Performs automatically selected transitions on `state` until an interactive
+  choice point is reached."
   [state]
-  (let [transitions (possible-transitions state)
-        quiescent?  (:quiescence-rule? (:rule (first transitions)))
-        ;; quiescence rules are always selected randomly, at least for now – TODO?
+  (let [state          (dissoc state :choices) ; not strictly necessary – just to be safe
+        transitions    (possible-transitions state)
+        quiescent?     (:quiescence-rule? (:rule (first transitions)))
         selection-mode (if quiescent? :random (:selection (current-stage state)))]
     (case selection-mode
-      :interactive (interactively-select-transition transitions)
-      :ordered     (first transitions)
-      :random      (rand-nth transitions))))
-
-
-;;; testing
-
-(defn run [program]
-  (loop [state (compiler/compile-program program)]
-    (let [transition (select-transition state)
-          state' (apply-transition state transition)]
-      (recur state'))))
+      :interactive (assoc state :choices transitions)
+      :ordered     (recur (apply-transition state (first transitions)))
+      :random      (recur (apply-transition state (rand-nth transitions))))))
