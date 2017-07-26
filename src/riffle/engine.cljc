@@ -16,12 +16,11 @@
 ;;; expand template strings to player-presentable strings
 
 (defn expand-template
-  "Converts a `template` string (containing var names prefixed with the $
-  character) to a player-presentable string by replacing var names with their
-  associated values in `bindings`."
+  "Converts a `template` string to a player-presentable string by replacing var
+  names with their associated values in `bindings`."
   [template bindings]
   (reduce (fn [s [var-name bound-value]]
-            (str/replace s (str \$ var-name) (str bound-value)))
+            (str/replace s (str var-name) (str bound-value)))
           template bindings))
 
 (defn choice-text

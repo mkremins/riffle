@@ -8,7 +8,7 @@
   "Classifies a `pattern` as either:
   * A :compound pattern, i.e. a sequential form
   * A :literal pattern, i.e. a lowercased symbol or natural number
-  * A logic variable :lvar, i.e. a symbol beginning with a capital letter
+  * A logic variable :lvar, i.e. a symbol beginning with a $ character
   * A :wildcard, i.e. a symbol beginning with an underscore
   * An :invalid pattern, which should never actually appear"
   [pattern]
@@ -16,7 +16,7 @@
     (symbol? pattern)
       (let [s (str pattern)]
         (cond (re-matches #"^_.*" s) :wildcard
-              (re-matches #"^[A-Z].*" s) :lvar
+              (re-matches #"^\$.*" s) :lvar
               :else :literal))
     (sequential? pattern)
       :compound
@@ -281,7 +281,7 @@
   (assert (map? stage)
     "Stage must be declared as a map!")
   (assert (valid-ident? (:name stage))
-    "Stage name must be a valid ident: a symbol starting with a lowercase letter!")
+    "Stage name must be a valid identifier!")
   (assert (contains? #{:interactive :ordered :random} (:selection stage))
     "Stage selection mode must be one of :interactive, :ordered, or :random!")
   (-> stage

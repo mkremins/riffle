@@ -19,9 +19,9 @@
 
 :bwds ; similarly just here for testing at the moment
 [{:sig [plus nat nat nat]
-  :cases [[plus z N N]
-          {:pattern [plus [s N] M [s Sum]]
-           :goals   [[plus N M Sum]]}]}]
+  :cases [[plus z $N $N]
+          {:pattern [plus [s $N] $M [s $Sum]]
+           :goals   [[plus $N $M $Sum]]}]}]
 
 :facts
 [[unmet max chris] [unmet max kate] [unmet max quinn]
@@ -38,13 +38,13 @@
   :selection :interactive
   :rules
   [{:name meet
-    :consume [[unmet C1 C2] [unmet C2 C1]]
+    :consume [[unmet $C1 $C2] [unmet $C2 $C1]]
     :check   []
-    :results [[met C1 C2] [met C2 C1]]}
+    :results [[met $C1 $C2] [met $C2 $C1]]}
    {:name see
-    :consume [[unseen C World]]
+    :consume [[unseen $C $World]]
     :check   []
-    :results [[seen C World]]}]}]
+    :results [[seen $C $World]]}]}]
 
 :stage main
 })
