@@ -18,6 +18,9 @@
 (defn value [ev]
   (.. ev -target -value))
 
+(defn int-value [ev]
+  (some-> (value ev) (js/parseInt 10)))
+
 ;;; editor
 
 (defn- copy-computed-styles! [from to css-props]
@@ -68,8 +71,30 @@
     (let [{:keys [path]} program]
       (dom/button
         {:class "delete-button"
-         :on-click (fn [_] (om/transact! program (butlast path) #(util/delete-index % (last path))))}
+         :on-click
+         (:on-click program
+           (fn [_] (om/transact! program (butlast path) #(util/delete-index % (last path)))))}
         "×"))))
+
+(defcomponent stage-selector [program owner]
+  (render [_]
+    (let [{:keys [path]}       program
+          selected-stage-idx   (get-in program path)
+          containing-stage-idx (when (= (last path) :goto) (second path))]
+      (dom/select
+        {:on-change #(om/update! program path (int-value %))
+         :value selected-stage-idx}
+        (when (nil? selected-stage-idx)
+          (dom/option {:value nil} "(none)"))
+        (for [[stage-idx stage] (util/with-indexes (:stages program))
+              ;; don't allow selection of the containing stage (for :goto in qui-rules)
+              :when (not= stage-idx containing-stage-idx)]
+          (dom/option {:value stage-idx}
+            (:name stage (str "(unnamed stage " stage-idx ")"))))
+        ;; TODO when in qui-rule goto context, add an extra option for "end of story"
+        ;(when containing-stage-idx
+        ;  (dom/option {:value -1} "(end of story)"))
+        ))))
 
 (defcomponent program-info [program owner]
   (render [_]
@@ -92,17 +117,16 @@
               (dom/option {:value "cyoa"} "CYOA")
               (dom/option {:value "parser"} "Parser")))
         (dom/tr {}
-          (dom/td "Starting stage")
+          (dom/td "Starting context")
           (dom/td
             (dom/select
-              {:on-change #(om/update! program :init-stage (value %))
-               ;; TODO when we go from 0 to 1 stages, automatically set
-               ;; (:init-stage program) to (:name (first (:stages program)))
-               :value (:init-stage program)}
-              (when (nil? (:init-stage program))
+              {:on-change #(om/update! program :context (int-value %))
+               :value (:context program)}
+              (when (nil? (:context program))
                 (dom/option {:value nil} "(none)"))
-              (for [stage (:stages program)]
-                (dom/option {:value (:name stage)} (:name stage)))))))))))
+              (for [[idx context] (util/with-indexes (:contexts program))]
+                (dom/option {:value idx}
+                  (:name context (str "(unnamed context " idx ")"))))))))))))
 
 (defcomponent type-view [program owner]
   (render [_]
@@ -195,7 +219,7 @@
             (dom/button
               {:class "create-button"
                :on-click (fn [_] (om/transact! program [] #(editor/create-subgoal % (:idx program) (peek path))))}
-              "Add subgoal")))))))
+              "+")))))))
 
 (defcomponent bwd-view [program owner]
   (render [_]
@@ -289,17 +313,8 @@
               (dom/tr {}
                 (dom/td "Go to stage")
                 (dom/td
-                  (dom/select
-                    {:on-change #(om/update! program (conj rule-path :goto) (value %))
-                     :value (:goto rule)}
-                    (when (nil? (:goto rule))
-                      (dom/option {:value nil} "(none)"))
-                    (for [stage (:stages program)
-                          :when (not= (:name stage) (:name (get-in program [:stages stage-idx])))]
-                      (dom/option {:value (:name stage)} (:name stage)))
-                    ;(dom/option {:value "(the end)"} "(the end)")
-                    ))))))
-        (dom/section {:class "rule-section"}
+                  (om/build stage-selector (assoc program :path (conj rule-path :goto))))))))
+        (dom/section {:class "decl-block-section"}
           (dom/div {:class "section-title"} "Before")
           (dom/div {:class "premises"}
             (om/build-all premise-view
@@ -309,7 +324,7 @@
               {:class "create-button"
                :on-click (fn [_] (om/transact! program [] #(editor/create-premise % stage-idx rule-idx)))}
               "+")))
-        (dom/section {:class "rule-section"}
+        (dom/section {:class "decl-block-section"}
           (dom/div {:class "section-title"} "After")
           (dom/div {:class "results"}
             (om/build-all result-view
@@ -331,7 +346,9 @@
              :on-change #(om/update! program [:stages idx :name] (value %))
              :placeholder "(stage name)"
              :value (:name stage)})
-          (om/build delete-button (assoc program :path [:stages idx])))
+          (om/build delete-button
+            (assoc program :on-click
+              (fn [_] (om/transact! program [] #(editor/delete-stage % idx))))))
         (dom/table {}
           (dom/tr {}
             (dom/td "Rule selection")
@@ -360,32 +377,63 @@
            :on-click #(om/transact! program [] editor/create-stage)}
           "Add stage")))))
 
-(defcomponent facts-view [program owner]
+(defcomponent context-view [program owner]
+  (render [_]
+    (let [idx     (:idx program)
+          context (nth (:contexts program) idx)]
+      (dom/div {:class (cond-> "decl-block context"
+                               (:selected? context) (str " selected"))}
+        (dom/div {:class "header"}
+          (om/build autoresizing-text-input
+            {:class "context-name"
+             :on-change #(om/update! program [:contexts idx :name] (value %))
+             :placeholder "(context name)"
+             :value (:name context)})
+          (om/build delete-button
+            (assoc program :on-click
+              (fn [_] (om/transact! program [] #(editor/delete-context % idx))))))
+        (dom/table {}
+          (dom/tr {}
+            (dom/td "Starting stage")
+            (dom/td
+              (om/build stage-selector (assoc program :path [:contexts idx :stage])))))
+        (dom/section {:class "decl-block-section"}
+          (dom/div {:class "section-title"} "Starting resources")
+          (dom/div {:class "facts"}
+            (for [[fact-idx fact] (util/with-indexes (:facts context))
+                  :let [fact-path [:contexts idx :facts fact-idx]]]
+              (dom/span {:class "logic-sentence fact"}
+                (om/build autoresizing-text-input
+                  {:on-change #(om/update! program fact-path (value %))
+                   :placeholder "(resource)"
+                   :value fact})
+                (om/build delete-button (assoc program :path fact-path))))
+            (dom/button
+              {:class "create-button"
+               :on-click (fn [_] (om/transact! program [] #(editor/create-fact % idx)))}
+              "+")))))))
+
+(defcomponent contexts-view [program owner]
   (render [_]
     (dom/section {:class "editor-section"}
-      (dom/div {:class "section-title"} "Starting resources")
-      (dom/div {:class "facts"}
-        (for [[idx fact] (util/with-indexes (:facts program))]
-          (dom/span {:class "logic-sentence fact"}
-            (om/build autoresizing-text-input
-              {:on-change #(om/update! program [:facts idx] (value %))
-               :placeholder "(resource)"
-               :value fact})
-            (om/build delete-button (assoc program :path [:facts idx]))))
+      (dom/div {:class "section-title"} "Starting contexts")
+      (dom/div {:class "contexts"}
+        (om/build-all context-view
+          (map #(assoc program :idx %) (range (count (:contexts program)))))
         (dom/button
           {:class "create-button"
-           :on-click #(om/transact! program [] editor/create-fact)}
-          "Add starting resource")))))
+           :on-click #(om/transact! program [] editor/create-context)}
+          "Add starting context")))))
 
 (defcomponent editor [program owner]
   (render [_]
     (dom/div {:class "editor"}
-      (om/build program-info program)
-      (om/build types-view   program)
-      (om/build preds-view   program)
-      (om/build bwds-view    program)
-      (om/build stages-view  program)
-      (om/build facts-view   program))))
+      (om/build program-info  program)
+      (om/build types-view    program)
+      (om/build preds-view    program)
+      (om/build bwds-view     program)
+      (om/build stages-view   program)
+      (om/build contexts-view program))))
 
 ;;; preview
 

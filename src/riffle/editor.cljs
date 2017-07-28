@@ -77,6 +77,20 @@
 (defn create-stage [program]
   (update program :stages conj {:name "" :selection :interactive :rules [init-rule]}))
 
+(defn delete-stage [program idx]
+  (-> program
+      (update :contexts
+        (fn [contexts]
+          (mapv #(cond-> % (= (:stage %) idx) (assoc :stage nil)) contexts)))
+      (update :stages
+        (fn [stages]
+          (mapv (fn [stage]
+                  (update stage :rules
+                    (fn [rules]
+                      (mapv #(cond-> % (= (:goto %) idx) (assoc :goto nil)) rules))))
+                stages)))
+      (update :stages util/delete-index idx)))
+
 (defn create-rule [program stage-idx]
   (update-in program [:stages stage-idx :rules] conj init-rule))
 
@@ -86,27 +100,40 @@
 (defn create-result [program stage-idx rule-idx]
   (update-in program [:stages stage-idx :rules rule-idx :results] conj ""))
 
-;;; facts
+;;; contexts
 
-;; TODO replace :facts with :contexts?
-;; (where a context is a named list/set of facts, and the author picks an
-;; initial context just like they pick an initial stage)
+(defn create-context [program]
+  (update program :contexts conj {:name "" :stage nil :facts [""]}))
 
-(defn create-fact [program]
-  (update program :facts conj ""))
+(defn set-starting-context [program idx]
+  (let [old-idx (:context program)
+        context (nth (:contexts program) idx)]
+    (-> program
+        (assoc :context idx)
+        (assoc-in [:contexts idx :selected?] true)
+        (cond-> (get (:contexts program) old-idx)
+                (update-in [:contexts old-idx] dissoc :selected?)))))
+
+(defn delete-context [program idx]
+  (-> program
+      (cond-> (= idx (:context program)) (assoc :context nil))
+      (update :contexts util/delete-index idx)))
+
+(defn create-fact [program context-idx]
+  (update-in program [:contexts context-idx :facts] conj ""))
 
 ;;; tie it all together
 
 (def init-program
   (-> {:title "Hello World"
        :interaction-style :cyoa
-       :init-stage nil
-       :types  []
-       :preds  []
-       :bwds   []
-       :stages []
-       :facts  []}
-      create-type create-pred create-bwd create-stage create-fact))
+       :context  nil
+       :types    []
+       :preds    []
+       :bwds     []
+       :stages   []
+       :contexts []}
+      create-type create-pred create-bwd create-stage create-context))
 
 (defn- prep-type [type]
   (-> type
@@ -123,27 +150,43 @@
                                (assoc :goals (mapv parse-logic-sentence (:subgoals %)))))
                   cases))))))
 
-(defn- prep-rule [rule]
+(defn- prep-rule [rule stages]
   (let [{consumes true checks false} (group-by (comp boolean :consume?) (:premises rule))
         parse-premise (comp parse-logic-sentence :input-str)]
     (-> (assoc rule
           :consume (mapv parse-premise consumes)
           :check   (mapv parse-premise checks)
           :name    (some-> (:choice-text rule) symbol))
-        (update :results #(mapv parse-logic-sentence %)))))
+        (update :results #(mapv parse-logic-sentence %))
+        (cond-> (:goto rule)
+                (update :goto #(some-> (get-in stages [% :name]) symbol))))))
 
-(defn- prep-stage [stage]
+(defn- prep-stage [stage stages]
+  (assert (and (string? (:name stage)) (seq (:name stage)))
+    "Stage must specify a valid name!")
   (let [{rules false qui-rules true}
-        (->> (:rules stage) (mapv prep-rule) (group-by (comp boolean :quiescence-rule?)))]
+        (->> (:rules stage)
+             (mapv #(prep-rule % stages))
+             (group-by (comp boolean :quiescence-rule?)))]
     (-> (update stage :name symbol)
         (assoc :rules rules :quiescence-rules qui-rules))))
 
 ;; TODO this is *way* naïve - it's more a hack to finally get stuff running in the browser than anything else
 (defn prep-for-compilation [program]
-  (-> program
-      (update :types  #(mapv prep-type %))
-      (update :preds  #(mapv parse-logic-sentence %))
-      (update :bwds   #(mapv prep-bwd %))
-      (update :stages #(mapv prep-stage %))
-      (update :facts  #(mapv parse-logic-sentence %))
-      (assoc :stage (symbol (:init-stage program)))))
+  (let [context    (get (:contexts program) (:context program))
+        _          (assert context "Must specify a valid starting context!")
+        stages     (mapv #(prep-stage % (:stages program)) (:stages program))
+        init-stage (get (:stages program) (:stage context))]
+    (assert (map? init-stage)
+      "Starting context must specify a valid starting stage!")
+    (assert (string? (:name init-stage))
+      "Starting context must specify a valid name!")
+    (-> program
+        (dissoc :contexts :context)
+        (update :types #(mapv prep-type %))
+        (update :preds #(mapv parse-logic-sentence %))
+        (update :bwds  #(mapv prep-bwd %))
+        (assoc
+          :stages stages
+          :stage (symbol (:name init-stage))
+          :facts (mapv parse-logic-sentence (:facts context))))))
