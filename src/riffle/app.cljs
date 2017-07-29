@@ -119,37 +119,40 @@
         (dom/a {:class "toggle-collapsed"} (if collapsed? "►" "▼")))
       (dom/div {:class "section-body"} children))))
 
+(defcomponent label-table [_ owner]
+  (render-state [_ {:keys [children]}]
+    (dom/table {:class "label-table"}
+      (dom/tbody {}
+        (for [[label child] children]
+          (dom/tr {}
+            (dom/td label)
+            (dom/td child)))))))
+
 (defcomponent program-info [program owner]
   (render [_]
     (dom/div {:class "program-info"}
-      (dom/table {}
-        (dom/tr {}
-          (dom/td "Title")
-          (dom/td
-            (om/build autoresizing-text-input
-              {:on-change #(om/update! program :title (value %))
-               :placeholder "(title)"
-               :type :text
-               :value (:title program)})))
-        (dom/tr {}
-          (dom/td "Interaction style")
-          (dom/td
-            (dom/select
-              {:on-change #(om/update! program :interaction-style (keyword (value %)))
-               :value (name (:interaction-style program))}
-              (dom/option {:value "cyoa"} "CYOA")
-              (dom/option {:value "parser"} "Parser")))
-        (dom/tr {}
-          (dom/td "Starting context")
-          (dom/td
-            (dom/select
-              {:on-change #(om/update! program :context (int-value %))
-               :value (:context program)}
-              (when (nil? (:context program))
-                (dom/option {:value nil} "(none)"))
-              (for [[idx context] (util/with-indexes (:contexts program))]
-                (dom/option {:value idx}
-                  (:name context (str "(unnamed context " idx ")"))))))))))))
+      ((domify label-table program) {}
+        ["Title"
+         (om/build autoresizing-text-input
+           {:on-change #(om/update! program :title (value %))
+            :placeholder "(title)"
+            :type :text
+            :value (:title program)})]
+        ["Interaction style"
+         (dom/select
+           {:on-change #(om/update! program :interaction-style (keyword (value %)))
+            :value (name (:interaction-style program))}
+           (dom/option {:value "cyoa"} "CYOA")
+           (dom/option {:value "parser"} "Parser"))]
+        ["Starting context"
+         (dom/select
+           {:on-change #(om/update! program :context (int-value %))
+            :value (:context program)}
+           (when (nil? (:context program))
+             (dom/option {:value nil} "(none)"))
+           (for [[idx context] (util/with-indexes (:contexts program))]
+             (dom/option {:value idx}
+               (:name context (str "(unnamed context " idx ")")))))]))))
 
 (defcomponent type-view [program owner]
   (render [_]
@@ -224,14 +227,12 @@
              :placeholder "(pattern)"
              :value (:pattern case)})
           (om/build delete-button program))
-        (dom/table {}
-          (dom/tr {}
-            (dom/td "Base case?")
-            (dom/td
-              (dom/input
-                {:checked (:base-case? case)
-                 :on-change #(om/transact! program (conj path :base-case?) not)
-                 :type "checkbox"}))))
+        ((domify label-table program) {}
+          ["Base case?"
+           (dom/input
+             {:checked (:base-case? case)
+              :on-change #(om/transact! program (conj path :base-case?) not)
+              :type "checkbox"})])
         (when-not (:base-case? case)
           (dom/div {:class "logic-sentences"}
             (for [[idx subgoal] (util/with-indexes (:subgoals case))]
@@ -351,11 +352,9 @@
                :on-click (fn [_] (om/transact! program [] #(editor/create-result % stage-idx rule-idx)))}
               "+")))
         (when qui-rule?
-          (dom/table {}
-            (dom/tr {}
-              (dom/td "Go to stage")
-              (dom/td
-                (om/build stage-selector (assoc program :path (conj rule-path :goto)))))))))))
+          ((domify label-table program) {}
+            ["Go to stage"
+             (om/build stage-selector (assoc program :path (conj rule-path :goto)))]))))))
 
 (defcomponent stage-view [program owner]
   (render [_]
@@ -374,15 +373,13 @@
           (om/build delete-button
             (assoc program :on-click
               (fn [_] (om/transact! program [] #(editor/delete-stage % idx))))))
-        (dom/table {}
-          (dom/tr {}
-            (dom/td "Rule selection")
-            (dom/td
-              (dom/select
-                {:on-change #(om/update! program [:stages idx :selection] (keyword (value %)))
-                 :value (name (:selection stage))}
-                (for [mode ["interactive" "ordered" "random"]]
-                  (dom/option {:value mode} (str/capitalize mode)))))))
+        ((domify label-table program) {}
+          ["Rule selection"
+           (dom/select
+             {:on-change #(om/update! program [:stages idx :selection] (keyword (value %)))
+              :value (name (:selection stage))}
+             (for [mode ["interactive" "ordered" "random"]]
+               (dom/option {:value mode} (str/capitalize mode))))])
         ((domify collapsible-section program)
           {:class "decl-block-section rules"
            :title (str "Rules (" (count rules) ")")}
@@ -429,11 +426,8 @@
           (om/build delete-button
             (assoc program :on-click
               (fn [_] (om/transact! program [] #(editor/delete-context % idx))))))
-        (dom/table {}
-          (dom/tr {}
-            (dom/td "Stage")
-            (dom/td
-              (om/build stage-selector (assoc program :path [:contexts idx :stage])))))
+        ((domify label-table program) {}
+          ["Stage" (om/build stage-selector (assoc program :path [:contexts idx :stage]))])
         ((domify collapsible-section program)
           {:class "decl-block-section facts"
            :title (str "Resources (" (count (:facts context)) ")")}
