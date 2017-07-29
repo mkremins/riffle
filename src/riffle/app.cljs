@@ -177,7 +177,7 @@
             (dom/button
               {:class "create-button"
                :on-click (fn [_] (om/transact! program [] #(editor/create-term % idx)))}
-              "Add term"))))))
+              "New term"))))))
 
 (defcomponent types-view [program owner]
   (render [_]
@@ -189,7 +189,7 @@
       (dom/button
         {:class "create-button"
          :on-click #(om/transact! program [] editor/create-type)}
-        "Add type"))))
+        "New type"))))
 
 (defcomponent pred-view [program owner]
   (render [_]
@@ -213,7 +213,7 @@
         (dom/button
           {:class "create-button"
            :on-click #(om/transact! program [] editor/create-pred)}
-          "Add resource type")))))
+          "New resource type")))))
 
 (defcomponent case-view [program owner]
   (render [_]
@@ -266,7 +266,7 @@
           (dom/button
             {:class "create-button"
              :on-click (fn [_] (om/transact! program #(editor/create-case % idx)))}
-            "Add case"))))))
+            "New case"))))))
 
 (defcomponent bwds-view [program owner]
   (render [_]
@@ -278,7 +278,7 @@
       (dom/button
         {:class "create-button"
          :on-click #(om/transact! program [] editor/create-bwd)}
-        "Add function"))))
+        "New function"))))
 
 (defcomponent premise-view [program owner]
   (render [_]
@@ -388,7 +388,7 @@
           (dom/button
             {:class "create-button"
              :on-click (fn [_] (om/transact! program [] #(editor/create-rule % idx)))}
-            "Add rule"))
+            "New rule"))
         ((domify collapsible-section program)
           {:class "decl-block-section qui-rules"
            :title (str "Fallback rules (" (count qui-rules) ")")}
@@ -397,7 +397,7 @@
           (dom/button
             {:class "create-button"
              :on-click (fn [_] (om/transact! program [] #(editor/create-qui-rule % idx)))}
-            "Add fallback rule"))))))
+            "New fallback rule"))))))
 
 (defcomponent stages-view [program owner]
   (render [_]
@@ -409,7 +409,7 @@
       (dom/button
         {:class "create-button"
          :on-click #(om/transact! program [] editor/create-stage)}
-        "Add stage"))))
+        "New stage"))))
 
 (defcomponent context-view [program owner]
   (render [_]
@@ -455,7 +455,7 @@
       (dom/button
         {:class "create-button"
          :on-click #(om/transact! program [] editor/create-context)}
-        "Add starting context"))))
+        "New starting context"))))
 
 (defcomponent editor [program owner]
   (render [_]
