@@ -262,10 +262,13 @@
     (let [{:keys [premise-path]} program
           premise (get-in program premise-path)]
       (dom/span {:class "logic-sentence premise"}
-        (dom/a
-          {:class "toggle-consume"
-           :on-click #(om/transact! program (conj premise-path :consume?) not)}
-          (if (:consume? premise) "Consume" "Check"))
+        (let [toggle-consume! #(om/transact! program (conj premise-path :consume?) not)]
+          (dom/a
+            {:class "toggle-consume"
+             :on-click toggle-consume!
+             :on-key-down #(when (= (.-key %) "Enter") (toggle-consume!))
+             :tab-index "0"}
+            (if (:consume? premise) "Consume" "Check")))
         (om/build autoresizing-text-input
           {:on-change #(om/update! program (conj premise-path :input-str) (value %))
            :placeholder "(premise)"
