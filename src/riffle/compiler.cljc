@@ -273,7 +273,8 @@
 
 (defn compile-quiescence-rule [rule program]
   (assert (map? rule))
-  (assert (contains? (:stages program) (:goto rule)))
+  (assert (or (:ending? rule) (contains? (:stages program) (:goto rule)))
+    (str "Can't go to stage `" (:goto rule) "`: no such stage exists!"))
   (compile-rule (assoc rule :quiescence-rule? true) program))
 
 (defn compile-stage [stage program]

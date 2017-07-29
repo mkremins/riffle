@@ -162,6 +162,8 @@
         ;; if rule was a quiescence rule, set the current stage to (:goto rule)
         stage' (:goto rule)
         state' (cond-> state' stage' (assoc :stage stage'))
+        ;; if rule ended the story, set :reached-end? to true
+        state' (cond-> state' (:ending? rule) (assoc :reached-end? true))
         ;; add the rule's description to our :content
         desc   (description transition)
         state' (cond-> state' desc (update :content (fnil conj []) desc))]
@@ -169,13 +171,14 @@
 
 (defn run-to-choice-point
   "Performs automatically selected transitions on `state` until an interactive
-  choice point is reached."
+  choice point (or the end of the story) is reached."
   [state]
-  (let [state          (dissoc state :choices) ; not strictly necessary – just to be safe
-        transitions    (possible-transitions state)
-        quiescent?     (:quiescence-rule? (:rule (first transitions)))
-        selection-mode (if quiescent? :random (:selection (current-stage state)))]
-    (case selection-mode
-      :interactive (assoc state :choices transitions)
-      :ordered     (recur (apply-transition state (first transitions)))
-      :random      (recur (apply-transition state (rand-nth transitions))))))
+  (if (:reached-end? state)
+    (update state :content conj "∎")
+    (let [transitions    (possible-transitions state)
+          quiescent?     (:quiescence-rule? (:rule (first transitions)))
+          selection-mode (if quiescent? :random (:selection (current-stage state)))]
+      (case selection-mode
+        :interactive (assoc state :choices transitions)
+        :ordered     (recur (apply-transition state (first transitions)))
+        :random      (recur (apply-transition state (rand-nth transitions)))))))

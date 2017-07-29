@@ -82,7 +82,11 @@
           selected-stage-idx   (get-in program path)
           containing-stage-idx (when (= (last path) :goto) (second path))]
       (dom/select
-        {:on-change #(om/update! program path (int-value %))
+        {:on-change
+         #(let [stage-idx (int-value %)]
+            (when containing-stage-idx
+              (om/update! program (conj (vec (butlast path)) :ending?) (= stage-idx -1)))
+            (om/update! program path stage-idx))
          :value selected-stage-idx}
         (when (nil? selected-stage-idx)
           (dom/option {:value nil} "(none)"))
@@ -91,10 +95,9 @@
               :when (not= stage-idx containing-stage-idx)]
           (dom/option {:value stage-idx}
             (:name stage (str "(unnamed stage " stage-idx ")"))))
-        ;; TODO when in qui-rule goto context, add an extra option for "end of story"
-        ;(when containing-stage-idx
-        ;  (dom/option {:value -1} "(end of story)"))
-        ))))
+        ;; when in qui-rule goto context, add an extra option for "end of story"
+        (when containing-stage-idx
+          (dom/option {:value -1} "(end)"))))))
 
 (defcomponent program-info [program owner]
   (render [_]
@@ -303,7 +306,7 @@
         (dom/table {}
           (dom/tbody {}
             (dom/tr {}
-              (dom/td "Fallback rule?")
+              (dom/td "Fallback?")
               (dom/td
                 (dom/input
                   {:checked qui-rule?
@@ -394,11 +397,11 @@
               (fn [_] (om/transact! program [] #(editor/delete-context % idx))))))
         (dom/table {}
           (dom/tr {}
-            (dom/td "Starting stage")
+            (dom/td "Stage")
             (dom/td
               (om/build stage-selector (assoc program :path [:contexts idx :stage])))))
         (dom/section {:class "decl-block-section"}
-          (dom/div {:class "section-title"} "Starting resources")
+          (dom/div {:class "section-title"} "Resources")
           (dom/div {:class "facts"}
             (for [[fact-idx fact] (util/with-indexes (:facts context))
                   :let [fact-path [:contexts idx :facts fact-idx]]]
@@ -437,31 +440,34 @@
 
 ;;; preview
 
+(defn stop [player]
+  (assoc player :running? false))
+
+(defn advance-or-stop [player]
+  (let [state' (engine/run-to-choice-point (:state player))]
+    (cond-> (assoc player :state state') (:reached-end? state') stop)))
+
 (defn play [player program]
   (try
     (let [init-state
           (-> program
               editor/prep-for-compilation
-              compiler/compile-program
-              engine/run-to-choice-point)]
-      (assoc player
-        :running? true
-        :state init-state
-        :error nil))
+              compiler/compile-program)]
+      (-> player
+          (assoc :running? true :state init-state :error nil)
+          advance-or-stop))
     (catch :default err
       (js/console.log err)
       (assoc player :running? false :error err))))
 
 (defn choose [player choice]
   (try
-    (update player :state
-      #(-> % (engine/apply-transition choice) engine/run-to-choice-point))
+    (-> player
+        (update :state engine/apply-transition choice)
+        advance-or-stop)
     (catch :default err
       (js/console.log err)
       (assoc player :running? false :error err))))
-
-(defn stop [player]
-  (assoc player :running? false))
 
 (defcomponent player [data owner]
   (render [_]
