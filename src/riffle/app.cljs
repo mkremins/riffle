@@ -99,6 +99,26 @@
         (when containing-stage-idx
           (dom/option {:value -1} "(end)"))))))
 
+;; from https://github.com/omcljs/om/issues/186#issuecomment-51731060
+;; (allows us to write components that take children as arguments)
+(defn domify
+  ([component cursor] (domify component cursor {}))
+  ([component cursor m]
+    (fn [attrs & children]
+      (om/build
+        component cursor (assoc m :state {:attrs attrs :children children})))))
+
+(defcomponent collapsible-section [_ owner]
+  (init-state [_]
+    {:collapsed? false})
+  (render-state [_ {:keys [attrs children collapsed?]}]
+    (dom/section {:class (cond-> (:class attrs) collapsed? (str " collapsed"))}
+      (dom/div {:class "section-header"
+                :on-click #(om/update-state! owner :collapsed? not)}
+        (dom/span {:class "section-title"} (:title attrs))
+        (dom/a {:class "toggle-collapsed"} (if collapsed? "►" "▼")))
+      (dom/div {:class "section-body"} children))))
+
 (defcomponent program-info [program owner]
   (render [_]
     (dom/div {:class "program-info"}
@@ -143,29 +163,30 @@
              :placeholder "(type name)"
              :value (:name type)})
           (om/build delete-button (assoc program :path [:types idx])))
-        (for [[term-idx term] (util/with-indexes (:terms type))]
-          (dom/span {:class "logic-sentence term"}
-            (om/build autoresizing-text-input
-              {:on-change #(om/update! program [:types idx :terms term-idx] (value %))
-               :placeholder "(term)"
-               :value term})
-            (om/build delete-button (assoc program :path [:types idx :terms term-idx]))))
-          (dom/button
-            {:class "create-button"
-             :on-click (fn [_] (om/transact! program [] #(editor/create-term % idx)))}
-            "Add term")))))
+        (dom/div {:class "logic-sentences"}
+          (for [[term-idx term] (util/with-indexes (:terms type))]
+            (dom/span {:class "logic-sentence term"}
+              (om/build autoresizing-text-input
+                {:on-change #(om/update! program [:types idx :terms term-idx] (value %))
+                 :placeholder "(term)"
+                 :value term})
+              (om/build delete-button (assoc program :path [:types idx :terms term-idx]))))
+            (dom/button
+              {:class "create-button"
+               :on-click (fn [_] (om/transact! program [] #(editor/create-term % idx)))}
+              "Add term"))))))
 
 (defcomponent types-view [program owner]
   (render [_]
-    (dom/section {:class "editor-section"}
-      (dom/div {:class "section-title"} "Types")
-      (dom/div {:class "types"}
-        (om/build-all type-view
-          (map #(assoc program :idx %) (range (count (:types program)))))
-        (dom/button
-          {:class "create-button"
-           :on-click #(om/transact! program [] editor/create-type)}
-          "Add type")))))
+    ((domify collapsible-section program)
+      {:class "editor-section types"
+       :title (str "Types (" (count (:types program)) ")")}
+      (om/build-all type-view
+        (map #(assoc program :idx %) (range (count (:types program)))))
+      (dom/button
+        {:class "create-button"
+         :on-click #(om/transact! program [] editor/create-type)}
+        "Add type"))))
 
 (defcomponent pred-view [program owner]
   (render [_]
@@ -174,21 +195,22 @@
       (dom/div {:class "logic-sentence pred"}
         (om/build autoresizing-text-input
           {:on-change #(om/update! program [:preds idx] (value %))
-           :placeholder "(resource)"
+           :placeholder "(resource type)"
            :value pred})
         (om/build delete-button (assoc program :path [:preds idx]))))))
 
 (defcomponent preds-view [program owner]
   (render [_]
-    (dom/section {:class "editor-section"}
-      (dom/div {:class "section-title"} "Resources")
-      (dom/div {:class "preds"}
+    ((domify collapsible-section program)
+      {:class "editor-section preds"
+       :title (str "Resource types (" (count (:preds program)) ")")}
+      (dom/div {:class "logic-sentences"}
         (om/build-all pred-view
           (map #(assoc program :idx %) (range (count (:preds program)))))
         (dom/button
           {:class "create-button"
            :on-click #(om/transact! program [] editor/create-pred)}
-          "Add resource")))))
+          "Add resource type")))))
 
 (defcomponent case-view [program owner]
   (render [_]
@@ -211,7 +233,7 @@
                  :on-change #(om/transact! program (conj path :base-case?) not)
                  :type "checkbox"}))))
         (when-not (:base-case? case)
-          (dom/div {:class "subgoals"}
+          (dom/div {:class "logic-sentences"}
             (for [[idx subgoal] (util/with-indexes (:subgoals case))]
               (dom/span {:class "logic-sentence subgoal"}
                 (om/build autoresizing-text-input
@@ -247,15 +269,15 @@
 
 (defcomponent bwds-view [program owner]
   (render [_]
-    (dom/section {:class "editor-section"}
-      (dom/div {:class "section-title"} "Functions")
-      (dom/div {:class "bwds"}
-        (om/build-all bwd-view
-          (map #(assoc program :idx %) (range (count (:bwds program)))))
-        (dom/button
-          {:class "create-button"
-           :on-click #(om/transact! program [] editor/create-bwd)}
-          "Add function")))))
+    ((domify collapsible-section program)
+      {:class "editor-section bwds"
+       :title (str "Functions (" (count (:bwds program)) ")")}
+      (om/build-all bwd-view
+        (map #(assoc program :idx %) (range (count (:bwds program)))))
+      (dom/button
+        {:class "create-button"
+         :on-click #(om/transact! program [] editor/create-bwd)}
+        "Add function"))))
 
 (defcomponent premise-view [program owner]
   (render [_]
@@ -306,9 +328,10 @@
            :placeholder "(description)"
            :value (:description rule)}
           {:opts {:multiline? true}})
-        (dom/section {:class "decl-block-section"}
-          (dom/div {:class "section-title"} "Before")
-          (dom/div {:class "premises"}
+        ((domify collapsible-section program)
+          {:class "decl-block-section premises"
+           :title (str "Before (" (count (:premises rule)) ")")}
+          (dom/div {:class "logic-sentences"}
             (om/build-all premise-view
               (map #(assoc program :premise-path (into rule-path [:premises %]))
                    (range (count (:premises rule)))))
@@ -316,9 +339,10 @@
               {:class "create-button"
                :on-click (fn [_] (om/transact! program [] #(editor/create-premise % stage-idx rule-idx)))}
               "+")))
-        (dom/section {:class "decl-block-section"}
-          (dom/div {:class "section-title"} "After")
-          (dom/div {:class "results"}
+        ((domify collapsible-section program)
+          {:class "decl-block-section results"
+           :title (str "After (" (count (:results rule)) ")")}
+          (dom/div {:class "logic-sentences"}
             (om/build-all result-view
               (map #(assoc program :result-path (into rule-path [:results %]))
                    (range (count (:results rule)))))
@@ -359,16 +383,18 @@
                  :value (name (:selection stage))}
                 (for [mode ["interactive" "ordered" "random"]]
                   (dom/option {:value mode} (str/capitalize mode)))))))
-        (dom/section {:class "decl-block-section"}
-          (dom/div {:class "section-title"} "Rules")
+        ((domify collapsible-section program)
+          {:class "decl-block-section rules"
+           :title (str "Rules (" (count rules) ")")}
           (om/build-all rule-view
             (map #(assoc program :stage-idx idx :rule-idx (:idx %)) rules))
           (dom/button
             {:class "create-button"
              :on-click (fn [_] (om/transact! program [] #(editor/create-rule % idx)))}
             "Add rule"))
-        (dom/section {:class "decl-block-section"}
-          (dom/div {:class "section-title"} "Fallback rules")
+        ((domify collapsible-section program)
+          {:class "decl-block-section qui-rules"
+           :title (str "Fallback rules (" (count qui-rules) ")")}
           (om/build-all rule-view
             (map #(assoc program :stage-idx idx :rule-idx (:idx %)) qui-rules))
           (dom/button
@@ -378,15 +404,15 @@
 
 (defcomponent stages-view [program owner]
   (render [_]
-    (dom/section {:class "editor-section"}
-      (dom/div {:class "section-title"} "Stages")
-      (dom/div {:class "stages"}
-        (om/build-all stage-view
-          (map #(assoc program :idx %) (range (count (:stages program)))))
-        (dom/button
-          {:class "create-button"
-           :on-click #(om/transact! program [] editor/create-stage)}
-          "Add stage")))))
+    ((domify collapsible-section program)
+      {:class "editor-section stages"
+       :title (str "Stages (" (count (:stages program)) ")")}
+      (om/build-all stage-view
+        (map #(assoc program :idx %) (range (count (:stages program)))))
+      (dom/button
+        {:class "create-button"
+         :on-click #(om/transact! program [] editor/create-stage)}
+        "Add stage"))))
 
 (defcomponent context-view [program owner]
   (render [_]
@@ -408,9 +434,10 @@
             (dom/td "Stage")
             (dom/td
               (om/build stage-selector (assoc program :path [:contexts idx :stage])))))
-        (dom/section {:class "decl-block-section"}
-          (dom/div {:class "section-title"} "Resources")
-          (dom/div {:class "facts"}
+        ((domify collapsible-section program)
+          {:class "decl-block-section facts"
+           :title (str "Resources (" (count (:facts context)) ")")}
+          (dom/div {:class "logic-sentences"}
             (for [[fact-idx fact] (util/with-indexes (:facts context))
                   :let [fact-path [:contexts idx :facts fact-idx]]]
               (dom/span {:class "logic-sentence fact"}
@@ -426,15 +453,15 @@
 
 (defcomponent contexts-view [program owner]
   (render [_]
-    (dom/section {:class "editor-section"}
-      (dom/div {:class "section-title"} "Starting contexts")
-      (dom/div {:class "contexts"}
-        (om/build-all context-view
-          (map #(assoc program :idx %) (range (count (:contexts program)))))
-        (dom/button
-          {:class "create-button"
-           :on-click #(om/transact! program [] editor/create-context)}
-          "Add starting context")))))
+    ((domify collapsible-section program)
+      {:class "editor-section contexts"
+       :title (str "Starting contexts (" (count (:contexts program)) ")")}
+      (om/build-all context-view
+        (map #(assoc program :idx %) (range (count (:contexts program)))))
+      (dom/button
+        {:class "create-button"
+         :on-click #(om/transact! program [] editor/create-context)}
+        "Add starting context"))))
 
 (defcomponent editor [program owner]
   (render [_]

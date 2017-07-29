@@ -28,12 +28,12 @@
   table {
     border-collapse: collapse;
   }
+  td {
+    line-height: 1.5;
+  }
   td:first-child {
     font-weight: bold;
     padding-right: 0.5rem;
-  }
-  tr:not(:last-child) td {
-    padding-bottom: 0.25rem;
   }
   /* basic page structure / layout */
   body {
@@ -47,22 +47,25 @@
     padding: 2rem;
     width: 50%;
   }
-  .program-info {
+  .program-info, .editor-section > .section-body {
     margin-bottom: 1.5rem;
   }
-  .editor-section {
-    margin-bottom: 1rem;
+  .section-header {
+    cursor: pointer;
+    line-height: 1.5;
+  }
+  .collapsed:last-child .section-header {
+    margin-bottom: 0;
+  }
+  .toggle-collapsed {
+    font-size: 10px;
+    margin-left: 0.25rem;
   }
   .section-title {
     font-weight: bold;
-    margin-bottom: 0.5rem;
   }
-  .types  > .create-button,
-  .bwds   > .create-button,
-  .stages > .create-button {
-    /* a little extra, to match the 0.5 gained from margin-bottom on
-       block-final logic sentence lists in other sections */
-    margin-bottom: 0.5rem;
+  .collapsed .section-body {
+    display: none;
   }
   /* "decl-blocks" (top-level declarations that aren't logic sentences) */
   .decl-block {
@@ -74,14 +77,12 @@
   .decl-block .decl-block {
     background: #ddd; /* nested decl-blocks get a darker background color */
   }
-  .type, .case, .rule {
-    /* cancel out the 0.5 gained from margin-bottom on block-final logic
-       sentence lists */
-    padding-bottom: 0;
+  .decl-block-section:not(:last-child) > .section-body {
+    margin-bottom: 0.5rem;
   }
   .decl-block .header {
     font-size: 16px;
-    margin-bottom: 0.5rem;
+    line-height: 1.5;
   }
   .decl-block .header input[type="text"] {
     font-weight: bold;
@@ -90,29 +91,25 @@
   .decl-block .header .delete-button {
     float: right;
   }
-  .decl-block table {
-    margin-bottom: 0.5rem;
-  }
-  .decl-block-section:not(:last-of-type) {
-    margin-bottom: 0.5rem;
-  }
-  .decl-block-section .section-title {
-    margin-bottom: 0.25rem;
-  }
   /* rules */
   .rule-description {
     margin-bottom: 1rem;
     resize: none;
     width: 100%;
   }
-  .premises .create-button,
-  .results  .create-button {
-    margin-bottom: 0.5rem;
-  }
-  .stage .decl-block-section:first-of-type {
-    margin-bottom: 0.75rem; /* some extra room between rules and fallback rules */
+  .premise .toggle-consume {
+    color: #555;
+    cursor: pointer;
+    margin-right: 0.25rem;
+    text-decoration: underline;
   }
   /* logic sentences */
+  .logic-sentences {
+    margin-bottom: -0.5rem; /* cancel out extra margin-bottom from individual logic sentences */
+  }
+  .logic-sentences .create-button {
+    margin-bottom: 0.5rem; /* keep extra spacing consistent even when no logic sentences actually present */
+  }
   .logic-sentence {
     background: lightblue;
     border: 1px dotted #777;
@@ -124,15 +121,6 @@
   }
   .logic-sentence .delete-button {
     margin-left: 0.25rem;
-  }
-  .premise .toggle-consume {
-    color: #555;
-    cursor: pointer;
-    margin-right: 0.25rem;
-    text-decoration: underline;
-  }
-  .rule .premises, .context .facts {
-    margin-bottom: -0.5rem; /* cancel out margin-bottom on .logic-sentence where it isn't wanted */
   }
   /* player */
   .player {
