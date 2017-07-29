@@ -303,20 +303,6 @@
            :placeholder "(description)"
            :value (:description rule)}
           {:opts {:multiline? true}})
-        (dom/table {}
-          (dom/tbody {}
-            (dom/tr {}
-              (dom/td "Fallback?")
-              (dom/td
-                (dom/input
-                  {:checked qui-rule?
-                   :on-change #(om/transact! program (conj rule-path :quiescence-rule?) not)
-                   :type "checkbox"})))
-            (when qui-rule?
-              (dom/tr {}
-                (dom/td "Go to stage")
-                (dom/td
-                  (om/build stage-selector (assoc program :path (conj rule-path :goto))))))))
         (dom/section {:class "decl-block-section"}
           (dom/div {:class "section-title"} "Before")
           (dom/div {:class "premises"}
@@ -336,12 +322,21 @@
             (dom/button
               {:class "create-button"
                :on-click (fn [_] (om/transact! program [] #(editor/create-result % stage-idx rule-idx)))}
-              "+")))))))
+              "+")))
+        (when qui-rule?
+          (dom/table {}
+            (dom/tr {}
+              (dom/td "Go to stage")
+              (dom/td
+                (om/build stage-selector (assoc program :path (conj rule-path :goto)))))))))))
 
 (defcomponent stage-view [program owner]
   (render [_]
     (let [idx   (:idx program)
-          stage (nth (:stages program) idx)]
+          stage (nth (:stages program) idx)
+          {rules false qui-rules true}
+          (->> (map #(assoc %1 :idx %2) (:rules stage) (range))
+               (group-by (comp boolean :quiescence-rule?)))]
       (dom/div {:class "decl-block stage"}
         (dom/div {:class "header"}
           (om/build autoresizing-text-input
@@ -361,12 +356,22 @@
                  :value (name (:selection stage))}
                 (for [mode ["interactive" "ordered" "random"]]
                   (dom/option {:value mode} (str/capitalize mode)))))))
-        (om/build-all rule-view
-          (map #(assoc program :stage-idx idx :rule-idx %) (range (count (:rules stage)))))
-        (dom/button
-          {:class "create-button"
-           :on-click (fn [_] (om/transact! program [] #(editor/create-rule % idx)))}
-          "Add rule")))))
+        (dom/section {:class "decl-block-section"}
+          (dom/div {:class "section-title"} "Rules")
+          (om/build-all rule-view
+            (map #(assoc program :stage-idx idx :rule-idx (:idx %)) rules))
+          (dom/button
+            {:class "create-button"
+             :on-click (fn [_] (om/transact! program [] #(editor/create-rule % idx)))}
+            "Add rule"))
+        (dom/section {:class "decl-block-section"}
+          (dom/div {:class "section-title"} "Fallback rules")
+          (om/build-all rule-view
+            (map #(assoc program :stage-idx idx :rule-idx (:idx %)) qui-rules))
+          (dom/button
+            {:class "create-button"
+             :on-click (fn [_] (om/transact! program [] #(editor/create-qui-rule % idx)))}
+            "Add fallback rule"))))))
 
 (defcomponent stages-view [program owner]
   (render [_]

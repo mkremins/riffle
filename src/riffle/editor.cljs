@@ -74,8 +74,12 @@
 (def init-rule
   {:choice-text "" :description "" :premises [init-premise] :results [""]})
 
+(def init-qui-rule
+  (assoc init-rule :quiescence-rule? true))
+
 (defn create-stage [program]
-  (update program :stages conj {:name "" :selection :interactive :rules [init-rule]}))
+  (update program :stages conj
+    {:name "" :selection :interactive :rules [init-rule init-qui-rule]}))
 
 (defn delete-stage [program idx]
   (-> program
@@ -94,6 +98,9 @@
 (defn create-rule [program stage-idx]
   (update-in program [:stages stage-idx :rules] conj init-rule))
 
+(defn create-qui-rule [program stage-idx]
+  (update-in program [:stages stage-idx :rules] conj init-qui-rule))
+
 (defn create-premise [program stage-idx rule-idx]
   (update-in program [:stages stage-idx :rules rule-idx :premises] conj init-premise))
 
@@ -104,15 +111,6 @@
 
 (defn create-context [program]
   (update program :contexts conj {:name "" :stage nil :facts [""]}))
-
-(defn set-starting-context [program idx]
-  (let [old-idx (:context program)
-        context (nth (:contexts program) idx)]
-    (-> program
-        (assoc :context idx)
-        (assoc-in [:contexts idx :selected?] true)
-        (cond-> (get (:contexts program) old-idx)
-                (update-in [:contexts old-idx] dissoc :selected?)))))
 
 (defn delete-context [program idx]
   (-> program
