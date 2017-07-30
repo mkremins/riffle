@@ -51,15 +51,16 @@
     margin-bottom: 1.5rem;
   }
   .section-header {
-    cursor: pointer;
     line-height: 1.5;
   }
   .collapsed:last-child .section-header {
     margin-bottom: 0;
   }
   .toggle-collapsed {
-    font-size: 10px;
-    margin-left: 0.25rem;
+    color: #555;
+    cursor: pointer;
+    font-size: 12px;
+    margin-left: 0.5rem;
   }
   .section-title {
     font-weight: bold;
@@ -76,6 +77,9 @@
   }
   .decl-block .decl-block {
     background: #ddd; /* nested decl-blocks get a darker background color */
+  }
+  .decl-block.collapsed > .body {
+    display: none;
   }
   .decl-block-section:not(:last-child) > .section-body {
     margin-bottom: 0.5rem;
