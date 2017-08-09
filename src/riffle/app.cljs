@@ -1,7 +1,8 @@
 (ns riffle.app
-  (:require [clojure.string :as str]
+  (:require [cljs.reader :as reader]
+            [clojure.string :as str]
             [om.core :as om]
-            [om-tools.core :refer-macros [defcomponent]]
+            [om-tools.core :refer-macros [defcomponent defcomponentmethod]]
             [om-tools.dom :as dom]
             [riffle.compiler :as compiler]
             [riffle.editor :as editor]
@@ -12,8 +13,8 @@
 
 (def app-state
   (atom
-    {:program editor/init-program
-     :preview {:running? false :state {}}}))
+    {:editor (editor/init-editor-state!)
+     :player {:running? false :state {}}}))
 
 (defn value [ev]
   (.. ev -target -value))
@@ -21,7 +22,7 @@
 (defn int-value [ev]
   (some-> (value ev) (js/parseInt 10)))
 
-;;; editor
+;;; generic UI components
 
 (defn- copy-computed-styles! [from to css-props]
   (let [from-style (js/window.getComputedStyle from)
@@ -66,45 +67,6 @@
   (will-unmount [_]
     (.remove (om/get-state owner :fake-input))))
 
-(defcomponent collapse-button [cursor owner]
-  (render [_]
-    (dom/a {:class "toggle-collapsed"
-            :on-click #(om/transact! cursor :collapsed? not)}
-      (if (:collapsed? cursor) "►" "▼"))))
-
-(defcomponent delete-button [program owner]
-  (render [_]
-    (let [{:keys [path]} program]
-      (dom/button
-        {:class "delete-button"
-         :on-click
-         (:on-click program
-           (fn [_] (om/transact! program (butlast path) #(util/delete-index % (last path)))))}
-        "×"))))
-
-(defcomponent stage-selector [program owner]
-  (render [_]
-    (let [{:keys [path]}       program
-          selected-stage-idx   (get-in program path)
-          containing-stage-idx (when (= (last path) :goto) (second path))]
-      (dom/select
-        {:on-change
-         #(let [stage-idx (int-value %)]
-            (when containing-stage-idx
-              (om/update! program (conj (vec (butlast path)) :ending?) (= stage-idx -1)))
-            (om/update! program path stage-idx))
-         :value selected-stage-idx}
-        (when (nil? selected-stage-idx)
-          (dom/option {:value nil} "(none)"))
-        (for [[stage-idx stage] (util/with-indexes (:stages program))
-              ;; don't allow selection of the containing stage (for :goto in qui-rules)
-              :when (not= stage-idx containing-stage-idx)]
-          (dom/option {:value stage-idx}
-            (:name stage (str "(unnamed stage " stage-idx ")"))))
-        ;; when in qui-rule goto context, add an extra option for "end of story"
-        (when containing-stage-idx
-          (dom/option {:value -1} "(end)"))))))
-
 ;; from https://github.com/omcljs/om/issues/186#issuecomment-51731060
 ;; (allows us to write components that take children as arguments)
 (defn domify
@@ -123,170 +85,111 @@
             (dom/td label)
             (dom/td child)))))))
 
-(defcomponent program-info [program owner]
-  (render [_]
-    (dom/div {:class "program-info"}
-      ((domify label-table program) {}
-        ["Title"
-         (om/build autoresizing-text-input
-           {:on-change #(om/update! program :title (value %))
-            :placeholder "(title)"
-            :type :text
-            :value (:title program)})]
-        ["Interaction style"
-         (dom/select
-           {:on-change #(om/update! program :interaction-style (keyword (value %)))
-            :value (name (:interaction-style program))}
-           (dom/option {:value "cyoa"} "CYOA")
-           (dom/option {:value "parser"} "Parser"))]
-        ["Starting context"
-         (dom/select
-           {:on-change #(om/update! program :context (int-value %))
-            :value (:context program)}
-           (when (nil? (:context program))
-             (dom/option {:value nil} "(none)"))
-           (for [[idx context] (util/with-indexes (:contexts program))]
-             (dom/option {:value idx}
-               (:name context (str "(unnamed context " idx ")")))))]))))
+;;; app-specific input components (reusable)
 
-(defcomponent type-view [program owner]
+(defn lookup-thing [props]
+  (editor/lookup (:program props) (:id props)))
+
+(defcomponent delete-button [props owner]
   (render [_]
-    (let [idx  (:idx program)
-          type (nth (:types program) idx)]
-      (dom/div {:class (cond-> "decl-block type" (:collapsed? type) (str " collapsed"))}
+    (let [{:keys [id program]} props]
+      (dom/button
+        {:class "delete-button"
+         :on-click (fn [_] (om/transact! program [] #(editor/delete-thing % id)))}
+        "×"))))
+
+(defn- display-name [kind]
+  (case kind
+    :pred    "resource type"
+    :bwd     "function"
+    :context "starting context"
+    :fact    "resource"
+    (name kind)))
+
+(defcomponent create-button [props owner]
+  (render [_]
+    (let [{parent-id :id, :keys [kind program]} props]
+      (dom/button
+        {:class "create-button"
+         :on-click
+         (fn [_] (om/transact! program [] #(editor/create-thing % kind parent-id)))}
+        (:text props (str "New " (display-name kind)))))))
+
+(defcomponent stage-selector [props owner]
+  (render [_]
+    (let [{:keys [program]}    props
+          {kind :is :as thing} (lookup-thing props)
+          stage-id-key         (case kind :context :stage-id :rule :goto-id)
+          current-stage-id     (get thing stage-id-key)
+          parent-stage-id      (when (= kind :rule) (:parent-id thing))]
+      (dom/select
+        {:on-change
+         #(let [stage-id (int-value %)]
+            (when parent-stage-id
+              (om/update! thing :ending? (nil? stage-id)))
+            (om/update! thing stage-id-key stage-id))
+         :value current-stage-id}
+        ;; when in qui-rule goto context, nil is legal as an "end of story" value
+        (when (or parent-stage-id (nil? current-stage-id))
+          (dom/option {:value nil} (if parent-stage-id "(end)" "(none)")))
+        (for [stage-id (:stage-ids program)
+              ;; don't allow selection of the parent stage (in qui-rule goto context)
+              :when (not= stage-id parent-stage-id)]
+          (dom/option {:value stage-id}
+            (:name (editor/lookup program stage-id) "(unnamed stage)")))))))
+
+;;; app-specific structural UI components
+;;; (decl blocks, logic sentences, other reusable building blocks)
+
+(defn- header-text-key [kind]
+  (case kind
+    (:type :stage :context) :name
+    (:bwd :case) :input-str
+    :rule :choice-text))
+
+(defn- header-placeholder-text [kind]
+  (if (= (header-text-key kind) :name)
+    (str (display-name kind) " name")
+    (case kind
+      :bwd  "signature"
+      :case "pattern"
+      :rule "choice text")))
+
+(defmulti decl-block-body
+  (fn [props owner] (:is (lookup-thing props))))
+
+(defcomponent decl-block [props owner]
+  (render [_]
+    (let [{kind :is :as thing} (lookup-thing props)
+          header-text-key (header-text-key kind)]
+      (dom/div {:class (cond-> (str "decl-block " (name kind))
+                               (:collapsed? thing) (str " collapsed"))}
         (dom/div {:class "header"}
           (om/build autoresizing-text-input
-            {:class "type-name"
-             :on-change #(om/update! program [:types idx :name] (value %))
-             :placeholder "(type name)"
-             :value (:name type)})
-          (om/build collapse-button type)
-          (om/build delete-button (assoc program :path [:types idx])))
-        (dom/div {:class "body"}
-          (dom/div {:class "logic-sentences"}
-            (for [[term-idx term] (util/with-indexes (:terms type))]
-              (dom/span {:class "logic-sentence term"}
-                (om/build autoresizing-text-input
-                  {:on-change #(om/update! program [:types idx :terms term-idx] (value %))
-                   :placeholder "(term)"
-                   :value term})
-                (om/build delete-button (assoc program :path [:types idx :terms term-idx]))))
-              (dom/button
-                {:class "create-button"
-                 :on-click (fn [_] (om/transact! program [] #(editor/create-term % idx)))}
-                "New term")))))))
+            {:on-change #(om/update! thing header-text-key (value %))
+             :placeholder (str "(" (header-placeholder-text kind) ")")
+             :value (get thing header-text-key)})
+          (dom/a {:class "toggle-collapsed"
+                  :on-click #(om/transact! thing :collapsed? not)}
+            (if (:collapsed? thing) "►" "▼"))
+          (om/build delete-button props))
+        (om/build decl-block-body props)))))
 
-(defcomponent types-view [program owner]
+(defcomponent logic-sentence [props owner]
   (render [_]
-    (dom/section {:class "editor-section types"}
-      (dom/div {:class "section-header section-title"} "Types")
-      (dom/div {:class "section-body"}
-        (om/build-all type-view
-          (map #(assoc program :idx %) (range (count (:types program)))))
-        (dom/button
-          {:class "create-button"
-           :on-click #(om/transact! program [] editor/create-type)}
-          "New type")))))
-
-(defcomponent pred-view [program owner]
-  (render [_]
-    (let [idx  (:idx program)
-          pred (nth (:preds program) idx)]
-      (dom/div {:class "logic-sentence pred"}
+    (let [{kind :is :as thing} (lookup-thing props)]
+      (dom/div {:class (str "logic-sentence " (name kind))}
         (om/build autoresizing-text-input
-          {:on-change #(om/update! program [:preds idx] (value %))
-           :placeholder "(resource type)"
-           :value pred})
-        (om/build delete-button (assoc program :path [:preds idx]))))))
+          {:on-change #(om/update! thing :input-str (value %))
+           :placeholder (str "(" (display-name kind) ")")
+           :value (:input-str thing)})
+        (om/build delete-button props)))))
 
-(defcomponent preds-view [program owner]
+(defcomponent premise-view [props owner]
   (render [_]
-    (dom/section {:class "editor-section preds"}
-      (dom/div {:class "section-header section-title"} "Resource types")
-      (dom/div {:class "section-body"}
-        (dom/div {:class "logic-sentences"}
-          (om/build-all pred-view
-            (map #(assoc program :idx %) (range (count (:preds program)))))
-          (dom/button
-            {:class "create-button"
-             :on-click #(om/transact! program [] editor/create-pred)}
-            "New resource type"))))))
-
-(defcomponent case-view [program owner]
-  (render [_]
-    (let [{:keys [path]} program
-          case (get-in program path)]
-      (dom/div {:class (cond-> "decl-block case" (:collapsed? case) (str " collapsed"))}
-        (dom/div {:class "header"}
-          (om/build autoresizing-text-input
-            {:class "case-pattern"
-             :on-change #(om/update! program (conj path :pattern) (value %))
-             :placeholder "(pattern)"
-             :value (:pattern case)})
-          (om/build collapse-button case)
-          (om/build delete-button program))
-        (dom/div {:class "body"}
-          ((domify label-table program) {}
-            ["Base case?"
-             (dom/input
-               {:checked (:base-case? case)
-                :on-change #(om/transact! program (conj path :base-case?) not)
-                :type "checkbox"})])
-          (when-not (:base-case? case)
-            (dom/div {:class "logic-sentences"}
-              (for [[idx subgoal] (util/with-indexes (:subgoals case))]
-                (dom/span {:class "logic-sentence subgoal"}
-                  (om/build autoresizing-text-input
-                    {:on-change #(om/update! program (into path [:subgoals idx]) (value %))
-                     :placeholder "(subgoal)"
-                     :value subgoal})
-                  (om/build delete-button (update program :path into [:subgoals idx]))))
-              (dom/button
-                {:class "create-button"
-                 :on-click (fn [_] (om/transact! program [] #(editor/create-subgoal % (:idx program) (peek path))))}
-                "+"))))))))
-
-(defcomponent bwd-view [program owner]
-  (render [_]
-    (let [idx (:idx program)
-          bwd (nth (:bwds program) idx)]
-      (dom/div {:class (cond-> "decl-block bwd" (:collapsed? bwd) (str " collapsed"))}
-        (dom/div {:class "header"}
-          (om/build autoresizing-text-input
-            {:class "bwd-signature"
-             :on-change #(om/update! program [:bwds idx :signature] (value %))
-             :placeholder "(signature)"
-             :value (:signature bwd)})
-          (om/build collapse-button bwd)
-          (om/build delete-button (assoc program :path [:bwds idx])))
-        (dom/div {:class "body"}
-          (dom/div {:class "cases"}
-            (om/build-all case-view
-              (map #(assoc program :path [:bwds idx :cases %])
-                   (range (count (:cases bwd)))))
-            (dom/button
-              {:class "create-button"
-               :on-click (fn [_] (om/transact! program #(editor/create-case % idx)))}
-              "New case")))))))
-
-(defcomponent bwds-view [program owner]
-  (render [_]
-    (dom/section {:class "editor-section bwds"}
-      (dom/div {:class "section-header section-title"} "Functions")
-      (dom/div {:class "section-body"}
-        (om/build-all bwd-view
-          (map #(assoc program :idx %) (range (count (:bwds program)))))
-        (dom/button
-          {:class "create-button"
-           :on-click #(om/transact! program [] editor/create-bwd)}
-          "New function")))))
-
-(defcomponent premise-view [program owner]
-  (render [_]
-    (let [{:keys [premise-path]} program
-          premise (get-in program premise-path)]
+    (let [premise (lookup-thing props)]
       (dom/span {:class "logic-sentence premise"}
-        (let [toggle-consume! #(om/transact! program (conj premise-path :consume?) not)]
+        (let [toggle-consume! #(om/transact! premise :consume? not)]
           (dom/a
             {:class "toggle-consume"
              :on-click toggle-consume!
@@ -294,186 +197,198 @@
              :tab-index "0"}
             (if (:consume? premise) "Consume" "Check")))
         (om/build autoresizing-text-input
-          {:on-change #(om/update! program (conj premise-path :input-str) (value %))
+          {:on-change #(om/update! premise :input-str (value %))
            :placeholder "(premise)"
            :value (:input-str premise)})
-        (om/build delete-button (assoc program :path premise-path))))))
+        (om/build delete-button props)))))
 
-(defcomponent result-view [program owner]
+(defcomponent thing-view [props owner]
   (render [_]
-    (let [{:keys [result-path]} program
-          result (get-in program result-path)]
-      (dom/span {:class "logic-sentence result"}
+    (case (:is (lookup-thing props))
+      (:type :bwd :case :stage :rule :context)
+        (om/build decl-block props)
+      (:term :pred :goal :result :fact)
+        (om/build logic-sentence props)
+      :premise
+        (om/build premise-view props))))
+
+(defn- build-things [props]
+  (om/build-all thing-view (map #(assoc props :id %) (:ids props))))
+
+(defcomponent logic-sentences [props owner]
+  (render [_]
+    (dom/div {:class "logic-sentences"}
+      (build-things props)
+      (om/build create-button (assoc props :text "+")))))
+
+(defcomponent editor-section [props owner]
+  (render [_]
+    (let [{:keys [kind]} props]
+      (dom/section {:class (str "editor-section " (str (name kind) "s"))}
+        (dom/div {:class "section-header"}
+          (str (str/capitalize (display-name kind)) "s"))
+        (dom/div {:class "section-body"}
+          (build-things (assoc props :ids (get (:program props) (editor/kind->ids-key kind))))
+          (om/build create-button props))))))
+
+;;; decl block bodies
+
+(defcomponentmethod decl-block-body :type [props owner]
+  (render [_]
+    (let [type (lookup-thing props)]
+      (dom/div {:class "body"}
+        (om/build logic-sentences (assoc props :kind :term :ids (:term-ids type)))))))
+
+(defcomponentmethod decl-block-body :bwd [props owner]
+  (render [_]
+    (let [bwd (lookup-thing props)]
+      (dom/div {:class "body"}
+        (dom/div {:class "cases"}
+          (build-things (assoc props :ids (:case-ids bwd)))
+          (om/build create-button (assoc props :kind :case)))))))
+
+(defcomponentmethod decl-block-body :case [props owner]
+  (render [_]
+    (let [case (lookup-thing props)]
+      (dom/div {:class "body"}
+        ((domify label-table props) {}
+          ["Base case?"
+           (dom/input
+             {:checked (:base-case? case)
+              :on-change #(om/transact! case :base-case? not)
+              :type "checkbox"})])
+        (when-not (:base-case? case)
+          (om/build logic-sentences (assoc props :kind :goal :ids (:goal-ids case))))))))
+
+(defcomponentmethod decl-block-body :stage [props owner]
+  (render [_]
+    (let [{:keys [program]} props
+          stage (lookup-thing props)
+          {rule-ids false qui-rule-ids true}
+          (group-by #(:quiescence-rule? (editor/lookup program %)) (:rule-ids stage))]
+      (dom/div {:class "body"}
+        ((domify label-table props) {}
+          ["Rule selection"
+           (dom/select
+             {:on-change #(om/update! stage :selection (keyword (value %)))
+              :value (name (:selection stage))}
+             (for [mode ["interactive" "ordered" "random"]]
+               (dom/option {:value mode} (str/capitalize mode))))])
+        (dom/section {:class "decl-block-section rules"}
+          (dom/div {:class "section-header"} "Rules")
+          (dom/div {:class "section-body"}
+            (build-things (assoc props :ids rule-ids))
+            (om/build create-button (assoc props :kind :rule))))
+        (dom/section {:class "decl-block-section qui-rules"}
+          (dom/div {:class "section-header"} "Fallback rules")
+          (dom/div {:class "section-body"}
+            (build-things (assoc props :ids qui-rule-ids))
+            (dom/button
+              {:class "create-button"
+               :on-click
+               (fn [_] (om/transact! program [] #(editor/create-qui-rule % (:id stage))))}
+              "New fallback rule")))))))
+
+(defcomponentmethod decl-block-body :rule [props owner]
+  (render [_]
+    (let [rule (lookup-thing props)]
+      (dom/div {:class "body"}
         (om/build autoresizing-text-input
-          {:on-change #(om/update! program result-path (value %))
-           :placeholder "(result)"
-           :value result})
-        (om/build delete-button (assoc program :path result-path))))))
+          {:class "rule-description"
+           :on-change #(om/update! rule :description (value %))
+           :placeholder "(description)"
+           :value (:description rule)}
+          {:opts {:multiline? true}})
+        (dom/section {:class "decl-block-section premises"}
+          (dom/div {:class "section-header"} "Before")
+          (dom/div {:class "section-body"}
+            (om/build logic-sentences (assoc props :kind :premise :ids (:premise-ids rule)))))
+        (dom/section {:class "decl-block-section results"}
+          (dom/div {:class "section-header"} "After")
+          (dom/div {:class "section-body"}
+            (om/build logic-sentences (assoc props :kind :result :ids (:result-ids rule)))))
+        (when (:quiescence-rule? rule)
+          ((domify label-table props) {}
+            ["Go to stage" (om/build stage-selector props)]))))))
 
-(defcomponent rule-view [program owner]
+(defcomponentmethod decl-block-body :context [props owner]
   (render [_]
-    (let [{:keys [stage-idx rule-idx]} program
-          rule-path [:stages stage-idx :rules rule-idx]
-          rule      (get-in program rule-path)
-          qui-rule? (:quiescence-rule? rule)]
-      (dom/div {:class (cond-> "decl-block rule" (:collapsed? rule) (str " collapsed"))}
-        (dom/div {:class "header"}
-          (om/build autoresizing-text-input
-            {:class "rule-choice-text"
-             :on-change #(om/update! program (conj rule-path :choice-text) (value %))
-             :placeholder "(choice text)"
-             :value (:choice-text rule)})
-          (om/build collapse-button rule)
-          (om/build delete-button (assoc program :path rule-path)))
-        (dom/div {:class "body"}
-          (om/build autoresizing-text-input
-            {:class "rule-description"
-             :on-change #(om/update! program (conj rule-path :description) (value %))
-             :placeholder "(description)"
-             :value (:description rule)}
-            {:opts {:multiline? true}})
-          (dom/section {:class "decl-block-section premises"}
-            (dom/div {:class "section-header section-title"} "Before")
-            (dom/div {:class "section-body"}
-              (dom/div {:class "logic-sentences"}
-                (om/build-all premise-view
-                  (map #(assoc program :premise-path (into rule-path [:premises %]))
-                       (range (count (:premises rule)))))
-                (dom/button
-                  {:class "create-button"
-                   :on-click (fn [_] (om/transact! program [] #(editor/create-premise % stage-idx rule-idx)))}
-                  "+"))))
-          (dom/section {:class "decl-block-section results"}
-            (dom/div {:class "section-header section-title"} "After")
-            (dom/div {:class "section-body"}
-              (dom/div {:class "logic-sentences"}
-                (om/build-all result-view
-                  (map #(assoc program :result-path (into rule-path [:results %]))
-                       (range (count (:results rule)))))
-                (dom/button
-                  {:class "create-button"
-                   :on-click (fn [_] (om/transact! program [] #(editor/create-result % stage-idx rule-idx)))}
-                  "+"))))
-          (when qui-rule?
-            ((domify label-table program) {}
-              ["Go to stage"
-               (om/build stage-selector (assoc program :path (conj rule-path :goto)))])))))))
+    (let [context (lookup-thing props)]
+      (dom/div {:class "body"}
+        ((domify label-table props) {}
+          ["Stage" (om/build stage-selector props)])
+        (dom/section {:class "decl-block-section facts"}
+          (dom/div {:class "section-header"} "Resources")
+          (dom/div {:class "section-body"}
+            (om/build logic-sentences (assoc props :kind :fact :ids (:fact-ids context)))))))))
 
-(defcomponent stage-view [program owner]
+;;; top-level editor UI
+
+(defcomponent program-info [editor owner]
   (render [_]
-    (let [idx   (:idx program)
-          stage (nth (:stages program) idx)
-          {rules false qui-rules true}
-          (->> (map #(assoc %1 :idx %2) (:rules stage) (range))
-               (group-by (comp boolean :quiescence-rule?)))]
-      (dom/div {:class (cond-> "decl-block stage" (:collapsed? stage) (str " collapsed"))}
-        (dom/div {:class "header"}
-          (om/build autoresizing-text-input
-            {:class "stage-name"
-             :on-change #(om/update! program [:stages idx :name] (value %))
-             :placeholder "(stage name)"
-             :value (:name stage)})
-          (om/build collapse-button stage)
-          (om/build delete-button
-            (assoc program :on-click
-              (fn [_] (om/transact! program [] #(editor/delete-stage % idx))))))
-        (dom/div {:class "body"}
-          ((domify label-table program) {}
-            ["Rule selection"
-             (dom/select
-               {:on-change #(om/update! program [:stages idx :selection] (keyword (value %)))
-                :value (name (:selection stage))}
-               (for [mode ["interactive" "ordered" "random"]]
-                 (dom/option {:value mode} (str/capitalize mode))))])
-          (dom/section {:class "decl-block-section rules"}
-            (dom/div {:class "section-header section-title"} "Rules")
-            (dom/div {:class "section-body"}
-              (om/build-all rule-view
-                (map #(assoc program :stage-idx idx :rule-idx (:idx %)) rules))
-              (dom/button
-                {:class "create-button"
-                 :on-click (fn [_] (om/transact! program [] #(editor/create-rule % idx)))}
-                "New rule")))
-          (dom/section {:class "decl-block-section qui-rules"}
-            (dom/div {:class "section-header section-title"} "Fallback rules")
-            (dom/div {:class "section-body"}
-              (om/build-all rule-view
-                (map #(assoc program :stage-idx idx :rule-idx (:idx %)) qui-rules))
-              (dom/button
-                {:class "create-button"
-                 :on-click (fn [_] (om/transact! program [] #(editor/create-qui-rule % idx)))}
-                "New fallback rule"))))))))
+    (let [program (editor/current-program editor)]
+      (dom/div {:class "program-info"}
+        (dom/div {:class "header story-title"}
+          (dom/input
+            {:on-change #(om/update! program :title (value %))
+             :placeholder "(title)"
+             :type "text"
+             :value (:title program)})
+          (when (> (count (:programs editor)) 1)
+            (dom/button
+              {:class "delete-button"
+               :on-click
+               (fn [_] (om/transact! editor [] #(editor/delete-program % (:program editor))))}
+              "×")))
+        ((domify label-table program) {}
+          ["Interaction style"
+           (dom/select
+             {:on-change #(om/update! program :interaction-style (keyword (value %)))
+              :value (name (:interaction-style program))}
+             (dom/option {:value "cyoa"} "CYOA")
+             (dom/option {:value "parser"} "Parser"))]
+          ["Starting context"
+           (dom/select
+             {:on-change #(om/update! program :context-id (int-value %))
+              :value (:context-id program)}
+             (when (nil? (:context-id program))
+               (dom/option {:value nil} "(none)"))
+             (for [id (:context-ids program)]
+               (dom/option {:value id}
+                 (:name (editor/lookup program id) "(unnamed context)"))))])
+        ((domify label-table program) {}
+          ["Load saved"
+           (dom/select
+             {:on-change
+              (fn [ev]
+                (let [v (int-value ev)]
+                  (if (= v -1)
+                    (om/transact! editor [] editor/create-program)
+                    (om/update! editor :program v))))
+              :value (:program editor)}
+             (for [[idx program] (util/with-indexes (:programs editor))]
+               (dom/option {:value idx} (:title program)))
+             (dom/option {:value -1} "(new program)"))]
+          ["Copy/paste"
+           (dom/input
+             {:class "copy-paste"
+              :on-change
+              (fn [ev]
+                (try
+                  (om/update! program [] (reader/read-string (value ev)))
+                  (catch :default err (js/console.log err))))
+              :type "text"
+              :value (pr-str program)})])))))
 
-(defcomponent stages-view [program owner]
-  (render [_]
-    (dom/section {:class "editor-section stages"}
-      (dom/div {:class "section-header section-title"} "Stages")
-      (dom/div {:class "section-body"}
-        (om/build-all stage-view
-          (map #(assoc program :idx %) (range (count (:stages program)))))
-        (dom/button
-          {:class "create-button"
-           :on-click #(om/transact! program [] editor/create-stage)}
-          "New stage")))))
-
-(defcomponent context-view [program owner]
-  (render [_]
-    (let [idx     (:idx program)
-          context (nth (:contexts program) idx)]
-      (dom/div {:class (cond-> "decl-block context" (:collapsed? context) (str " collapsed"))}
-        (dom/div {:class "header"}
-          (om/build autoresizing-text-input
-            {:class "context-name"
-             :on-change #(om/update! program [:contexts idx :name] (value %))
-             :placeholder "(context name)"
-             :value (:name context)})
-          (om/build collapse-button context)
-          (om/build delete-button
-            (assoc program :on-click
-              (fn [_] (om/transact! program [] #(editor/delete-context % idx))))))
-        (dom/div {:class "body"}
-          ((domify label-table program) {}
-            ["Stage" (om/build stage-selector (assoc program :path [:contexts idx :stage]))])
-          (dom/section {:class "decl-block-section facts"}
-            (dom/div {:class "section-header section-title"} "Resources")
-            (dom/div {:class "section-body"}
-              (dom/div {:class "logic-sentences"}
-                (for [[fact-idx fact] (util/with-indexes (:facts context))
-                      :let [fact-path [:contexts idx :facts fact-idx]]]
-                  (dom/span {:class "logic-sentence fact"}
-                    (om/build autoresizing-text-input
-                      {:on-change #(om/update! program fact-path (value %))
-                       :placeholder "(resource)"
-                       :value fact})
-                    (om/build delete-button (assoc program :path fact-path))))
-                (dom/button
-                  {:class "create-button"
-                   :on-click (fn [_] (om/transact! program [] #(editor/create-fact % idx)))}
-                  "+")))))))))
-
-(defcomponent contexts-view [program owner]
-  (render [_]
-    (dom/section {:class "editor-section contexts"}
-      (dom/div {:class "section-header section-title"} "Starting contexts")
-      (dom/div {:class "section-body"}
-        (om/build-all context-view
-          (map #(assoc program :idx %) (range (count (:contexts program)))))
-        (dom/button
-          {:class "create-button"
-           :on-click #(om/transact! program [] editor/create-context)}
-          "New starting context")))))
-
-(defcomponent editor [program owner]
+(defcomponent editor [editor owner]
   (render [_]
     (dom/div {:class "editor"}
-      (om/build program-info  program)
-      (om/build types-view    program)
-      (om/build preds-view    program)
-      (om/build bwds-view     program)
-      (om/build stages-view   program)
-      (om/build contexts-view program))))
+      (om/build program-info editor)
+      (let [program (editor/current-program editor)]
+        (for [kind editor/toplevel-kinds]
+          (om/build editor-section {:program program :kind kind}))))))
 
-;;; preview
+;;; player
 
 (defn stop [player]
   (assoc player :running? false))
@@ -535,7 +450,18 @@
 (defcomponent app [data owner]
   (render [_]
     (dom/div {:class "app"}
-      (om/build editor (:program data))
-      (om/build player data))))
+      (om/build editor (:editor data))
+      (om/build player (assoc data :program (editor/current-program (:editor data))))
+      (dom/div
+        {:class "debug"
+         :style {:position "fixed" :right 0 :top 0}}
+        (dom/button
+          {:on-click #(js/localStorage.removeItem "program")}
+          "Clear localStorage")))))
 
-(om/root app app-state {:target (js/document.getElementById "app")})
+(om/root app app-state
+  {:target (js/document.getElementById "app")
+   :tx-listen
+   (fn [{:keys [old-state new-state]} _]
+     (when-not (= (:editor old-state) (:editor new-state))
+       (editor/save-editor-state! (:editor new-state))))})

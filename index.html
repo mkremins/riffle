@@ -51,6 +51,7 @@
     margin-bottom: 1.5rem;
   }
   .section-header {
+    font-weight: bold;
     line-height: 1.5;
   }
   .collapsed:last-child .section-header {
@@ -62,11 +63,30 @@
     font-size: 12px;
     margin-left: 0.5rem;
   }
-  .section-title {
-    font-weight: bold;
-  }
   .collapsed .section-body {
     display: none;
+  }
+  /* program-info */
+  .program-info {
+    position: relative;
+  }
+  .program-info > :last-child {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+  }
+  .story-title {
+    margin-bottom: 0.5rem;
+    width: 100%;
+  }
+  .story-title input[type="text"] {
+    font-size: 24px;
+    font-weight: bold;
+    width: 95%;
+  }
+  input[type="text"].copy-paste {
+    background: #ccc;
+    font-family: monospace;
   }
   /* "decl-blocks" (top-level declarations that aren't logic sentences) */
   .decl-block {
@@ -92,7 +112,7 @@
     font-weight: bold;
     max-width: 95%; /* leave a little room on the right for the delete button */
   }
-  .decl-block .header .delete-button {
+  .header .delete-button {
     float: right;
   }
   /* rules */

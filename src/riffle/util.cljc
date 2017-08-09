@@ -6,6 +6,11 @@
   [coll]
   (= (count coll) (count (distinct coll))))
 
+(defn clamp
+  "Clamps the number `n` to the range `[lo hi]`, both inclusive."
+  [n lo hi]
+  (-> n (max lo) (min hi)))
+
 (comment ; doesn't work in CLJS – cmap param to `clojure.string/escape` has to be map
 (let [special? #{\- \[ \] \{ \} \( \) \* \+ \? \. \\ \^ \$ \|}]
   (defn regex-escape

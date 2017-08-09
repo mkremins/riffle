@@ -1,137 +1,212 @@
 (ns riffle.editor
   (:require [cljs.reader :as reader]
+            [clojure.string :as str]
             [riffle.util :as util]))
 
-(comment ; more "advanced" (but unfinished) parsing that allows infix notation, etc
-(defn parse-parts [input-str]
-  (let [[_ pre-text] (re-find #"^([^\$]*)" input-str)]
-    (->> (re-seq #"\$([A-Za-z0-9_-]+)([^\$]*)" input-str)
-         (mapcat (fn [[_ slot-name post-text]]
-                   [[:slot slot-name] [:text post-text]]))
-         (into (cond-> [] pre-text (conj [:text pre-text]))))))
+(defn lookup
+  "Looks up and returns the thing with ID `id` in `program`, or nil if no such
+  thing exists."
+  [program id]
+  (get (:things program) id))
 
-(defn parts->parser
-  "Given a seq of `parts` returned by `parse-parts`, returns a parser: a fn
-  that, given a single string argument, returns either a map from slot names to
-  matched strings (if the parse is successful) or nil (if the parse fails)."
-  [parts]
-  (let [slot-names (map second (filter #(= (first %) :slot) parts))
-        regex-str
-        (reduce (fn [regex-str [part-type part-text]]
-                  (case part-type
-                    :slot (str regex-str "(.*)")
-                    :text (str regex-str (util/regex-escape part-text))))
-                \^ parts)
-        regex (js/RegExp. (str regex-str \$))]
-    (fn [input-str]
-      (when-let [[_ & captures] (re-find regex input-str)]
-        (zipmap slot-names captures)))))
+(defn set-thing-prop [program id prop value]
+  (assoc-in program [:things id prop] value))
 
-(defn parse-logic-sentence [input-str]
-  (let [parts (parse-parts input-str)]
-    (into [(symbol input-str)]
-          (map (comp symbol second) (filter #(= (first %) :slot) parts)))))
-)
+;;; schema (+ helper fns for traversing program structure)
 
-(defn parse-logic-sentence [input-str]
-  (reader/read-string (str \[ input-str \])))
+(def toplevel-kinds
+  [:type :pred :bwd :stage :context])
 
-;;; types
+(def thing-templates
+  {:type    {:name "" :term-ids []}
+   :term    {:input-str ""}
+   :pred    {:input-str ""}
+   :bwd     {:input-str "" :case-ids []}
+   :case    {:input-str "" :base-case? true :goal-ids []}
+   :goal    {:input-str ""}
+   :stage   {:name "" :selection :interactive :rule-ids []}
+   :rule    {:choice-text ""
+             :description ""
+             :premise-ids []
+             :result-ids []
+             :quiescence-rule? false
+             :goto-id nil}
+   :premise {:input-str "" :consume? false}
+   :result  {:input-str ""}
+   :context {:name "" :stage-id nil :fact-ids []}
+   :fact    {:input-str ""}})
 
-(defn create-type [program]
-  (update program :types conj {:name "" :terms [""]}))
+(defn- ids-key? [k]
+  (str/ends-with? (name k) "-ids"))
 
-(defn create-term [program type-idx]
-  (update-in program [:types type-idx :terms] conj ""))
+(defn kind->ids-key [kind]
+  (keyword (str (name kind) "-ids")))
 
-;;; preds
+(defn- ids-key->kind [ids-key]
+  (assert (ids-key? ids-key))
+  (keyword (str/replace (name ids-key) #"-ids$" "")))
 
-(defn create-pred [program]
-  (update program :preds conj ""))
+;;; create things
 
-;;; bwds
+(declare create-thing)
 
-(def init-case
-  {:pattern "" :base-case? true :subgoals [""]})
+(defn- next-id [program]
+  [(:next-id program) (update program :next-id inc)])
 
-(def init-bwd
-  {:signature "" :cases [init-case]})
+(defn create-qui-rule
+  "A special-case variant of `create-thing` for creating quiescence rules. The
+  code currently treats quiescence rules as identical to normal rules in all
+  but a few places, while the UI presents them as wholly distinct. This fn is a
+  hack needed to maintain the illusion of distinction on the front end."
+  [program stage-id]
+  (let [program' (create-thing program :rule stage-id)]
+    (set-thing-prop program' (:prev-id program') :quiescence-rule? true)))
 
-(defn create-bwd [program]
-  (update program :bwds conj init-bwd))
+(defn- create-kids [program {:keys [id] :as thing}]
+  (reduce
+    (fn [program kids-key]
+      (if (= kids-key :rule-ids)
+        ;; another special case for handling quiescence rules specifically:
+        ;; when creating a new stage, create one normal and one quiescence rule
+        (-> program
+            (create-thing :rule id)
+            (create-qui-rule id))
+        (let [kid-kind (ids-key->kind kids-key)]
+          (create-thing program kid-kind id))))
+    program
+    (filter ids-key? (keys thing))))
 
-(defn create-case [program bwd-idx]
-  (update-in program [:bwds bwd-idx :cases] conj init-case))
+(defn- add-to-parent [program {:keys [id parent-id], kind :is :as thing}]
+  (let [kids-key  (kind->ids-key kind)
+        kids-path (cond->> [kids-key] parent-id (into [:things parent-id]))]
+    (update-in program kids-path (fnil conj []) id)))
 
-(defn create-subgoal [program bwd-idx case-idx]
-  (update-in program [:bwds bwd-idx :cases case-idx :subgoals] conj ""))
+(defn create-thing
+  "Given a `program`, a `kind` of thing to create, and an optional `parent-id`
+  specifying the parent of the created thing, returns an updated program in
+  which a new thing of the appropriate kind has been created. The :prev-id key
+  in the updated program will point to the ID of the newly-created thing."
+  ([program kind] (create-thing program kind nil))
+  ([program kind parent-id]
+    (assert (contains? thing-templates kind)
+      (str "Invalid kind of thing to create: " kind))
+    (if (contains? (set toplevel-kinds) kind)
+      (assert (not parent-id)
+        (str "A thing of kind " kind " may not have a parent"))
+      (assert parent-id
+        (str "A thing of kind " kind " must have a parent")))
+    ;; TODO assert parent is appropriate kind for the kind of kid we're creating?
+    (let [[id program'] (next-id program)
+          template (get thing-templates kind)
+          thing (assoc template :id id :is kind :parent-id parent-id)]
+      (-> program'
+          (assoc-in [:things id] thing)
+          (create-kids thing)
+          (add-to-parent thing)
+          (assoc :prev-id id)))))
 
-;;; stages
+;;; delete things
 
-(def init-premise
-  {:input-str "" :consume? false})
+(declare delete-thing)
 
-(def init-rule
-  {:choice-text "" :description "" :premises [init-premise] :results [""]})
+(defn- delete-kids [program thing]
+  (let [kids-keys (filter ids-key? (keys thing))
+        kid-ids   (mapcat #(get thing %) kids-keys)]
+    (reduce delete-thing program kid-ids)))
 
-(def init-qui-rule
-  (assoc init-rule :quiescence-rule? true))
+(defn- remove-from-parent [program {:keys [id parent-id], kind :is :as thing}]
+  (let [kids-key  (kind->ids-key kind)
+        kids-path (cond->> [kids-key] parent-id (into [:things parent-id]))]
+    (update-in program kids-path #(vec (remove #{id} %)))))
 
-(defn create-stage [program]
-  (update program :stages conj
-    {:name "" :selection :interactive :rules [init-rule init-qui-rule]}))
+(defn- cleanup-dependents [program {:keys [id] :as thing}]
+  (case (:is thing)
+    :context
+      (cond-> program (= (:context program) id) (assoc :context nil))
+    :stage
+      (reduce (fn [program [thing-id thing]]
+                (cond-> program
+                  (= (:goto-id thing) id)
+                    (set-thing-prop thing-id :goto-id nil)
+                  (= (:stage-id thing) id)
+                    (set-thing-prop thing-id :stage-id nil)))
+              program (:things program))
+    ;else
+      program))
 
-(defn delete-stage [program idx]
-  (-> program
-      (update :contexts
-        (fn [contexts]
-          (mapv #(cond-> % (= (:stage %) idx) (assoc :stage nil)) contexts)))
-      (update :stages
-        (fn [stages]
-          (mapv (fn [stage]
-                  (update stage :rules
-                    (fn [rules]
-                      (mapv #(cond-> % (= (:goto %) idx) (assoc :goto nil)) rules))))
-                stages)))
-      (update :stages util/delete-index idx)))
+(defn delete-thing
+  "Returns an updated `program` in which the thing with ID `id`, and all its
+  descendants, have been deleted. Also performs any necessary cleanup on other
+  things that depended on the deleted thing."
+  [program id]
+  (let [thing (lookup program id)]
+    ;; TODO assert thing actually exists?
+    (-> program
+        (delete-kids thing)
+        (remove-from-parent thing)
+        (cleanup-dependents thing)
+        (update :things dissoc id))))
 
-(defn create-rule [program stage-idx]
-  (update-in program [:stages stage-idx :rules] conj init-rule))
+;;; create and delete whole programs
 
-(defn create-qui-rule [program stage-idx]
-  (update-in program [:stages stage-idx :rules] conj init-qui-rule))
-
-(defn create-premise [program stage-idx rule-idx]
-  (update-in program [:stages stage-idx :rules rule-idx :premises] conj init-premise))
-
-(defn create-result [program stage-idx rule-idx]
-  (update-in program [:stages stage-idx :rules rule-idx :results] conj ""))
-
-;;; contexts
-
-(defn create-context [program]
-  (update program :contexts conj {:name "" :stage nil :facts [""]}))
-
-(defn delete-context [program idx]
-  (-> program
-      (cond-> (= idx (:context program)) (assoc :context nil))
-      (update :contexts util/delete-index idx)))
-
-(defn create-fact [program context-idx]
-  (update-in program [:contexts context-idx :facts] conj ""))
-
-;;; tie it all together
+(defn current-program [editor]
+  (nth (:programs editor) (:program editor)))
 
 (def init-program
-  (-> {:title "Hello World"
-       :interaction-style :cyoa
-       :context  nil
-       :types    []
-       :preds    []
-       :bwds     []
-       :stages   []
-       :contexts []}
-      create-type create-pred create-bwd create-stage create-context))
+  (reduce create-thing
+    {:title ""
+     :interaction-style :cyoa
+     :context-id nil
+     :things {}
+     :next-id 0}
+    toplevel-kinds))
+
+(defn create-program [editor]
+  (let [editor' (update editor :programs conj init-program)]
+    (assoc editor' :program (dec (count (:programs editor'))))))
+
+(defn delete-program [editor idx]
+  (let [editor' (update editor :programs util/delete-index idx)]
+    (update editor' :program #(util/clamp % 0 (dec (count (:programs editor')))))))
+
+;;; save and load editor state
+
+(defn load-editor-state! []
+  (try
+    (when-let [saved (reader/read-string (js/localStorage.getItem "editor"))]
+      (assert (map? saved) "Saved editor state must be an EDN map")
+      (assert (vector? (:programs saved)) "Saved programs must be an EDN vector")
+      (doseq [saved-program (:programs saved)]
+        (assert (map? saved-program) "Saved program must be an EDN map")
+        (assert (string? (:title saved-program)) "Saved program :title must be an EDN string"))
+      saved)
+    (catch :default err ; TODO report this error in some user-visible way?
+      (js/console.log err)
+      nil)))
+
+(defn save-editor-state! [editor]
+  (js/localStorage.setItem "editor" (pr-str editor)))
+
+(defn init-editor-state! []
+  (or (load-editor-state!) (-> {:programs [] :program nil} create-program)))
+
+;;; convert editor program format to a format the compiler will accept
+
+(defn- pull-in-kids [program thing]
+  (reduce
+    (fn [thing kids-key]
+      (let [kids-key' (keyword (str (name (ids-key->kind kids-key)) "s"))]
+        (-> thing
+            (dissoc kids-key :parent-id)
+            (assoc kids-key'
+              (->> (get thing kids-key)
+                   (map #(lookup program %))
+                   (mapv #(pull-in-kids program %)))))))
+    thing
+    (filter ids-key? (keys thing))))
+
+(defn- parse-logic-sentence [{:keys [input-str]}]
+  (reader/read-string (str \[ input-str \])))
 
 (defn- prep-type [type]
   (-> type
@@ -139,52 +214,48 @@
       (update :terms (partial mapv parse-logic-sentence))))
 
 (defn- prep-bwd [bwd]
-  (let [sig (parse-logic-sentence (:signature bwd))]
+  (let [sig (parse-logic-sentence bwd)]
     (-> (assoc bwd :sig sig :name (first sig))
         (update :cases
           (fn [cases]
-            (mapv #(-> (update % :pattern parse-logic-sentence)
-                       (cond-> (not (:base-case? %))
-                               (assoc :goals (mapv parse-logic-sentence (:subgoals %)))))
+            (mapv (fn [case]
+                    (-> (dissoc case :input-str)
+                        (assoc :pattern (parse-logic-sentence case))
+                        (update :goals
+                          #(when-not (:base-case? case) (mapv parse-logic-sentence %)))))
                   cases))))))
 
-(defn- prep-rule [rule stages]
-  (let [{consumes true checks false} (group-by (comp boolean :consume?) (:premises rule))
-        parse-premise (comp parse-logic-sentence :input-str)]
+(defn- prep-rule [rule program]
+  (let [{consumes true checks false} (group-by (comp boolean :consume?) (:premises rule))]
     (-> (assoc rule
-          :consume (mapv parse-premise consumes)
-          :check   (mapv parse-premise checks)
+          :consume (mapv parse-logic-sentence consumes)
+          :check   (mapv parse-logic-sentence checks)
           :name    (some-> (:choice-text rule) symbol))
+        (dissoc :premises)
         (update :results #(mapv parse-logic-sentence %))
-        (cond-> (:goto rule)
-                (update :goto #(some-> (get-in stages [% :name]) symbol))))))
+        (cond-> (:goto-id rule)
+                (-> (dissoc rule :goto-id)
+                    (assoc :goto (some-> (lookup program (:goto-id rule)) :name symbol)))))))
 
-(defn- prep-stage [stage stages]
+(defn- prep-stage [stage program]
   (assert (and (string? (:name stage)) (seq (:name stage)))
-    "Stage must specify a valid name!")
+    (str "Invalid stage name: " (pr-str (:name stage))))
   (let [{rules false qui-rules true}
         (->> (:rules stage)
-             (mapv #(prep-rule % stages))
+             (mapv #(prep-rule % program))
              (group-by (comp boolean :quiescence-rule?)))]
     (-> (update stage :name symbol)
         (assoc :rules rules :quiescence-rules qui-rules))))
 
-;; TODO this is *way* naïve - it's more a hack to finally get stuff running in the browser than anything else
 (defn prep-for-compilation [program]
-  (let [context    (get (:contexts program) (:context program))
-        _          (assert context "Must specify a valid starting context!")
-        stages     (mapv #(prep-stage % (:stages program)) (:stages program))
-        init-stage (get (:stages program) (:stage context))]
-    (assert (map? init-stage)
-      "Starting context must specify a valid starting stage!")
-    (assert (string? (:name init-stage))
-      "Starting context must specify a valid name!")
-    (-> program
-        (dissoc :contexts :context)
-        (update :types #(mapv prep-type %))
-        (update :preds #(mapv parse-logic-sentence %))
-        (update :bwds  #(mapv prep-bwd %))
+  (let [context (pull-in-kids program (lookup program (:context-id program)))]
+    (assert context "Must specify a valid starting context")
+    (-> (pull-in-kids program program)
+        (dissoc :contexts :context-id)
+        (update :types  #(mapv prep-type %))
+        (update :preds  #(mapv parse-logic-sentence %))
+        (update :bwds   #(mapv prep-bwd %))
+        (update :stages (partial mapv #(prep-stage % program)))
         (assoc
-          :stages stages
-          :stage (symbol (:name init-stage))
+          :stage (symbol (:name (lookup program (:stage-id context))))
           :facts (mapv parse-logic-sentence (:facts context))))))
