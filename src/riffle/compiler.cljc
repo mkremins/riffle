@@ -1,7 +1,6 @@
 (ns riffle.compiler
   (:require [riffle.util :as util]))
 
-
 ;;; the core of the typechecker
 
 (defn classify-pattern
@@ -83,7 +82,6 @@
             (some-> (get (:bwds program) pred) :sig))]
     (typecheck-args args arg-types (:types program) lvar-types context)))
 
-
 ;;; compilation helpers
 
 (defn valid-ident?
@@ -105,7 +103,6 @@
       (assert (contains? types arg-type)
         (str "Type `" arg-type "` not found in provided types!")))
     sig))
-
 
 ;;; compile & typecheck type declarations
 
@@ -135,7 +132,6 @@
                 (update type :terms compile-terms type-names)))
          (util/indexed-by :name))))
 
-
 ;;; compile & typecheck forward-chaining predicate (pred) declarations
 
 (defn compile-preds
@@ -148,7 +144,6 @@
        (map #(check-signature % types))
        (map #(do (println (str "  ◦ Pred `" (first %) "`")) %))
        (util/indexed-by first)))
-
 
 ;;; compile & typecheck backward-chaining predicate (bwd) declarations
 
@@ -191,7 +186,6 @@
     ;; actually compile the individual cases of each bwd
     (->> bwds (map #(compile-bwd % program)) (util/indexed-by :name))))
 
-
 ;;; compile & typecheck facts
 
 (defn compile-facts
@@ -210,7 +204,6 @@
                   {:id id :expr fact :initial? true}))
               (range))
          (util/indexed-by :id))))
-
 
 ;;; compile & typecheck stages
 
@@ -298,7 +291,6 @@
   (let [program {:types types :preds preds :bwds bwds
                  :stages (util/indexed-by :name stages)}]
     (->> stages (map #(compile-stage % program)) (util/indexed-by :name))))
-
 
 ;;; compile & typecheck the whole program
 
