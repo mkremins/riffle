@@ -256,10 +256,12 @@
       (dom/div {:class "body"}
         ((domify label-table props) {}
           ["Base case?"
-           (dom/input
-             {:checked (:base-case? case)
-              :on-change #(om/transact! case :base-case? not)
-              :type "checkbox"})])
+           (let [toggle-base-case! #(om/transact! case :base-case? not)]
+             (dom/input
+               {:checked (:base-case? case)
+                :on-change toggle-base-case!
+                :on-key-down #(when (= (.-key %) "Enter") (toggle-base-case!))
+                :type "checkbox"}))])
         (when-not (:base-case? case)
           (om/build logic-sentences (assoc props :kind :goal :ids (:goal-ids case))))))))
 
