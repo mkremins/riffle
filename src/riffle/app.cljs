@@ -169,9 +169,12 @@
             {:on-change #(om/update! thing header-text-key (value %))
              :placeholder (str "(" (header-placeholder-text kind) ")")
              :value (get thing header-text-key)})
-          (dom/a {:class "toggle-collapsed"
-                  :on-click #(om/transact! thing :collapsed? not)}
-            (if (:collapsed? thing) "►" "▼"))
+          (let [toggle-collapsed! #(om/transact! thing :collapsed? not)]
+            (dom/a {:class "toggle-collapsed"
+                    :on-click toggle-collapsed!
+                    :on-key-down #(when (= (.-key %) "Enter") (toggle-collapsed!))
+                    :tab-index "0"}
+              (if (:collapsed? thing) "►" "▼")))
           (om/build delete-button props))
         (om/build decl-block-body props)))))
 
