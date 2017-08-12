@@ -100,10 +100,11 @@
 
 (defn- display-name [kind]
   (case kind
-    :pred    "resource type"
-    :bwd     "function"
-    :context "starting context"
-    :fact    "resource"
+    :pred     "resource type"
+    :bwd      "function"
+    :qui-rule "fallback rule"
+    :context  "starting context"
+    :fact     "resource"
     (name kind)))
 
 (defcomponent create-button [props owner]
@@ -119,15 +120,11 @@
   (render [_]
     (let [{:keys [program]}    props
           {kind :is :as thing} (lookup-thing props)
-          stage-id-key         (case kind :context :stage-id :rule :goto-id)
+          stage-id-key         (case kind :context :stage-id :qui-rule :goto-id)
           current-stage-id     (get thing stage-id-key)
-          parent-stage-id      (when (= kind :rule) (:parent-id thing))]
+          parent-stage-id      (when (= kind :qui-rule) (:parent-id thing))]
       (dom/select
-        {:on-change
-         #(let [stage-id (int-value %)]
-            (when parent-stage-id
-              (om/update! thing :ending? (nil? stage-id)))
-            (om/update! thing stage-id-key stage-id))
+        {:on-change #(om/update! thing stage-id-key (int-value %))
          :value current-stage-id}
         ;; when in qui-rule goto context, nil is legal as an "end of story" value
         (when (or parent-stage-id (nil? current-stage-id))
@@ -145,7 +142,7 @@
   (case kind
     (:type :stage :context) :name
     (:bwd :case) :input-str
-    :rule :choice-text))
+    (:rule :qui-rule) :choice-text))
 
 (defn- header-placeholder-text [kind]
   (if (= (header-text-key kind) :name)
@@ -153,7 +150,7 @@
     (case kind
       :bwd  "signature"
       :case "pattern"
-      :rule "choice text")))
+      (:rule :qui-rule) "choice text")))
 
 (defmulti decl-block-body
   (fn [props owner] (:is (lookup-thing props))))
@@ -208,7 +205,7 @@
 (defcomponent thing-view [props owner]
   (render [_]
     (case (:is (lookup-thing props))
-      (:type :bwd :case :stage :rule :context)
+      (:type :bwd :case :stage :rule :qui-rule :context)
         (om/build decl-block props)
       (:term :pred :goal :result :fact)
         (om/build logic-sentence props)
@@ -267,10 +264,7 @@
 
 (defcomponentmethod decl-block-body :stage [props owner]
   (render [_]
-    (let [{:keys [program]} props
-          stage (lookup-thing props)
-          {rule-ids false qui-rule-ids true}
-          (group-by #(:quiescence-rule? (editor/lookup program %)) (:rule-ids stage))]
+    (let [stage (lookup-thing props)]
       (dom/div {:class "body"}
         ((domify label-table props) {}
           ["Rule selection"
@@ -282,17 +276,13 @@
         (dom/section {:class "decl-block-section rules"}
           (dom/div {:class "section-header"} "Rules")
           (dom/div {:class "section-body"}
-            (build-things (assoc props :ids rule-ids))
+            (build-things (assoc props :ids (:rule-ids stage)))
             (om/build create-button (assoc props :kind :rule))))
         (dom/section {:class "decl-block-section qui-rules"}
           (dom/div {:class "section-header"} "Fallback rules")
           (dom/div {:class "section-body"}
-            (build-things (assoc props :ids qui-rule-ids))
-            (dom/button
-              {:class "create-button"
-               :on-click
-               (fn [_] (om/transact! program [] #(editor/create-qui-rule % (:id stage))))}
-              "New fallback rule")))))))
+            (build-things (assoc props :ids (:qui-rule-ids stage)))
+            (om/build create-button (assoc props :kind :qui-rule))))))))
 
 (defcomponentmethod decl-block-body :rule [props owner]
   (render [_]
@@ -312,9 +302,13 @@
           (dom/div {:class "section-header"} "After")
           (dom/div {:class "section-body"}
             (om/build logic-sentences (assoc props :kind :result :ids (:result-ids rule)))))
-        (when (:quiescence-rule? rule)
+        (when (= (:is rule) :qui-rule)
           ((domify label-table props) {}
             ["Go to stage" (om/build stage-selector props)]))))))
+
+(defcomponentmethod decl-block-body :qui-rule [props owner]
+  (render [_]
+    (om/build (get-method decl-block-body :rule) props)))
 
 (defcomponentmethod decl-block-body :context [props owner]
   (render [_]

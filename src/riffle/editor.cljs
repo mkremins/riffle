@@ -18,23 +18,19 @@
   [:type :pred :bwd :stage :context])
 
 (def thing-templates
-  {:type    {:name "" :term-ids []}
-   :term    {:input-str ""}
-   :pred    {:input-str ""}
-   :bwd     {:input-str "" :case-ids []}
-   :case    {:input-str "" :base-case? true :goal-ids []}
-   :goal    {:input-str ""}
-   :stage   {:name "" :selection :interactive :rule-ids []}
-   :rule    {:choice-text ""
-             :description ""
-             :premise-ids []
-             :result-ids []
-             :quiescence-rule? false
-             :goto-id nil}
-   :premise {:input-str "" :consume? false}
-   :result  {:input-str ""}
-   :context {:name "" :stage-id nil :fact-ids []}
-   :fact    {:input-str ""}})
+  {:type     {:name "" :term-ids []}
+   :term     {:input-str ""}
+   :pred     {:input-str ""}
+   :bwd      {:input-str "" :case-ids []}
+   :case     {:input-str "" :base-case? true :goal-ids []}
+   :goal     {:input-str ""}
+   :stage    {:name "" :selection :interactive :rule-ids [] :qui-rule-ids []}
+   :rule     {:choice-text "" :description "" :premise-ids [] :result-ids []}
+   :qui-rule {:choice-text "" :description "" :premise-ids [] :result-ids [] :goto-id nil}
+   :premise  {:input-str "" :consume? false}
+   :result   {:input-str ""}
+   :context  {:name "" :stage-id nil :fact-ids []}
+   :fact     {:input-str ""}})
 
 (defn- ids-key? [k]
   (str/ends-with? (name k) "-ids"))
@@ -53,26 +49,11 @@
 (defn- next-id [program]
   [(:next-id program) (update program :next-id inc)])
 
-(defn create-qui-rule
-  "A special-case variant of `create-thing` for creating quiescence rules. The
-  code currently treats quiescence rules as identical to normal rules in all
-  but a few places, while the UI presents them as wholly distinct. This fn is a
-  hack needed to maintain the illusion of distinction on the front end."
-  [program stage-id]
-  (let [program' (create-thing program :rule stage-id)]
-    (set-thing-prop program' (:prev-id program') :quiescence-rule? true)))
-
 (defn- create-kids [program {:keys [id] :as thing}]
   (reduce
     (fn [program kids-key]
-      (if (= kids-key :rule-ids)
-        ;; another special case for handling quiescence rules specifically:
-        ;; when creating a new stage, create one normal and one quiescence rule
-        (-> program
-            (create-thing :rule id)
-            (create-qui-rule id))
-        (let [kid-kind (ids-key->kind kids-key)]
-          (create-thing program kid-kind id))))
+      (let [kid-kind (ids-key->kind kids-key)]
+        (create-thing program kid-kind id)))
     program
     (filter ids-key? (keys thing))))
 
@@ -225,6 +206,12 @@
                           #(when-not (:base-case? case) (mapv parse-logic-sentence %)))))
                   cases))))))
 
+(defn- prep-qui-rule [{:keys [goto-id] :as qui-rule} program]
+  (let [qui-rule' (dissoc qui-rule :goto-id)]
+    (if (nil? goto-id)
+      (assoc qui-rule' :ending? true)
+      (assoc qui-rule' :goto (some-> (lookup program goto-id) :name symbol)))))
+
 (defn- prep-rule [rule program]
   (let [{consumes true checks false} (group-by (comp boolean :consume?) (:premises rule))]
     (-> (assoc rule
@@ -233,19 +220,15 @@
           :name    (some-> (:choice-text rule) symbol))
         (dissoc :premises)
         (update :results #(mapv parse-logic-sentence %))
-        (cond-> (:goto-id rule)
-                (-> (dissoc rule :goto-id)
-                    (assoc :goto (some-> (lookup program (:goto-id rule)) :name symbol)))))))
+        (cond-> (= (:is rule) :qui-rule) (prep-qui-rule program)))))
 
 (defn- prep-stage [stage program]
   (assert (and (string? (:name stage)) (seq (:name stage)))
     (str "Invalid stage name: " (pr-str (:name stage))))
-  (let [{rules false qui-rules true}
-        (->> (:rules stage)
-             (mapv #(prep-rule % program))
-             (group-by (comp boolean :quiescence-rule?)))]
-    (-> (update stage :name symbol)
-        (assoc :rules rules :quiescence-rules qui-rules))))
+  (-> (update stage :name symbol)
+      (update :rules (partial mapv #(prep-rule % program)))
+      (assoc :quiescence-rules (mapv #(prep-rule % program) (:qui-rules stage)))
+      (dissoc :qui-rules)))
 
 (defn prep-for-compilation [program]
   (let [context (pull-in-kids program (lookup program (:context-id program)))]
