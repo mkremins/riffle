@@ -156,7 +156,7 @@
     (assoc bwd :sig sig :name name)))
 
 (defn compile-bwd-case [case bwd-name program]
-  (println (str "    ◦ Case `" (or (:pattern case) case) "`"))
+  (println (str "    ◦ Case `" (pr-str (or (:pattern case) case)) "`"))
   (let [case       (cond-> case (sequential? case) (#(-> {:pattern %})))
         _          (assert (map? case))
         pattern    (:pattern case)
@@ -199,7 +199,7 @@
   (let [program {:types types :preds preds}]
     (->> facts
          (map (fn [id fact]
-                (println (str "  ◦ Fact `" fact "`"))
+                (println (str "  ◦ Fact `" (pr-str fact) "`"))
                 (let [fact (cond-> fact (symbol? fact) vector)]
                   (assert (sequential? fact))
                   (typecheck-pred-expr fact program {} :value)
