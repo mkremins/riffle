@@ -77,9 +77,11 @@
   (assert (sequential? expr)
     (str "Invalid predicate expression `" (pr-str expr) "` – should be of form `[name & args]`!"))
   (let [[pred & args] expr
-        [_    & arg-types]
+        signature
         (or (get (:preds program) pred)
-            (some-> (get (:bwds program) pred) :sig))]
+            (some-> (get (:bwds program) pred) :sig))
+        _ (assert signature (str "No such pred or bwd `" pred "`!"))
+        arg-types (rest signature)]
     (typecheck-args args arg-types (:types program) lvar-types context)))
 
 ;;; compilation helpers
