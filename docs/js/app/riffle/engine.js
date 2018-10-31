@@ -21,10 +21,10 @@ return stage;
  *   names with their associated values in `bindings`.
  */
 riffle.engine.expand_template = (function riffle$engine$expand_template(template,bindings){
-return cljs.core.reduce.cljs$core$IFn$_invoke$arity$3((function (s,p__22160){
-var vec__22161 = p__22160;
-var var_name = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__22161,(0),null);
-var bound_value = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__22161,(1),null);
+return cljs.core.reduce.cljs$core$IFn$_invoke$arity$3((function (s,p__21661){
+var vec__21662 = p__21661;
+var var_name = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__21662,(0),null);
+var bound_value = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__21662,(1),null);
 return clojure.string.replace(s,[cljs.core.str(var_name)].join(''),[cljs.core.str(bound_value)].join(''));
 }),template,bindings);
 });
@@ -58,22 +58,22 @@ return null;
  *   Returns updated lvar-bindings if unification was successful, else nil.
  */
 riffle.engine.unify = (function riffle$engine$unify(pattern,value,lvar_bindings){
-var G__22170 = (((riffle.compiler.classify_pattern(pattern) instanceof cljs.core.Keyword))?riffle.compiler.classify_pattern(pattern).fqn:null);
-switch (G__22170) {
+var G__21671 = (((riffle.compiler.classify_pattern(pattern) instanceof cljs.core.Keyword))?riffle.compiler.classify_pattern(pattern).fqn:null);
+switch (G__21671) {
 case "compound":
 if((cljs.core.sequential_QMARK_(value)) && (cljs.core._EQ_.cljs$core$IFn$_invoke$arity$2(cljs.core.count(pattern),cljs.core.count(value)))){
-return cljs.core.reduce.cljs$core$IFn$_invoke$arity$3(((function (G__22170){
-return (function (lvar_bindings__$1,p__22171){
-var vec__22172 = p__22171;
-var pattern_SINGLEQUOTE_ = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__22172,(0),null);
-var value_SINGLEQUOTE_ = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__22172,(1),null);
-var G__22175 = lvar_bindings__$1;
-if((G__22175 == null)){
+return cljs.core.reduce.cljs$core$IFn$_invoke$arity$3(((function (G__21671){
+return (function (lvar_bindings__$1,p__21672){
+var vec__21673 = p__21672;
+var pattern_SINGLEQUOTE_ = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__21673,(0),null);
+var value_SINGLEQUOTE_ = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__21673,(1),null);
+var G__21676 = lvar_bindings__$1;
+if((G__21676 == null)){
 return null;
 } else {
-return riffle$engine$unify(pattern_SINGLEQUOTE_,value_SINGLEQUOTE_,G__22175);
+return riffle$engine$unify(pattern_SINGLEQUOTE_,value_SINGLEQUOTE_,G__21676);
 }
-});})(G__22170))
+});})(G__21671))
 ,lvar_bindings,cljs.core.map.cljs$core$IFn$_invoke$arity$3(cljs.core.vector,pattern,value));
 } else {
 return null;
@@ -119,15 +119,15 @@ riffle.engine.match_pred = (function riffle$engine$match_pred(partial_match,prem
 var lvar_bindings = cljs.core.cst$kw$bindings.cljs$core$IFn$_invoke$arity$1(partial_match);
 var already_used_QMARK_ = cljs.core.comp.cljs$core$IFn$_invoke$arity$2(cljs.core.set(cljs.core.map.cljs$core$IFn$_invoke$arity$2(cljs.core.cst$kw$id,cljs.core.cst$kw$facts.cljs$core$IFn$_invoke$arity$1(partial_match))),cljs.core.cst$kw$id);
 return cljs.core.map.cljs$core$IFn$_invoke$arity$2(((function (lvar_bindings,already_used_QMARK_){
-return (function (p__22182){
-var vec__22183 = p__22182;
-var fact = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__22183,(0),null);
-var lvar_bindings__$1 = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__22183,(1),null);
+return (function (p__21683){
+var vec__21684 = p__21683;
+var fact = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__21684,(0),null);
+var lvar_bindings__$1 = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__21684,(1),null);
 return cljs.core.update.cljs$core$IFn$_invoke$arity$4(cljs.core.assoc.cljs$core$IFn$_invoke$arity$3(partial_match,cljs.core.cst$kw$bindings,lvar_bindings__$1),cljs.core.cst$kw$facts,cljs.core.conj,fact);
 });})(lvar_bindings,already_used_QMARK_))
 ,cljs.core.filter.cljs$core$IFn$_invoke$arity$2(cljs.core.second,cljs.core.map.cljs$core$IFn$_invoke$arity$2(cljs.core.juxt.cljs$core$IFn$_invoke$arity$2(cljs.core.identity,((function (lvar_bindings,already_used_QMARK_){
-return (function (p1__22177_SHARP_){
-return riffle.engine.unify(premise,cljs.core.cst$kw$expr.cljs$core$IFn$_invoke$arity$1(p1__22177_SHARP_),lvar_bindings);
+return (function (p1__21678_SHARP_){
+return riffle.engine.unify(premise,cljs.core.cst$kw$expr.cljs$core$IFn$_invoke$arity$1(p1__21678_SHARP_),lvar_bindings);
 });})(lvar_bindings,already_used_QMARK_))
 ),cljs.core.remove.cljs$core$IFn$_invoke$arity$2(already_used_QMARK_,cljs.core.vals(facts)))));
 });
@@ -149,13 +149,13 @@ if(cljs.core.truth_(cljs.core.cst$kw$base_DASH_case_QMARK_.cljs$core$IFn$_invoke
 return lvar_bindings;
 } else {
 var subgoals = cljs.core.map.cljs$core$IFn$_invoke$arity$2(((function (cases,lvar_bindings,temp__4655__auto__,case$,temp__4657__auto__){
-return (function (p1__22186_SHARP_){
-return clojure.walk.prewalk_replace(lvar_bindings,p1__22186_SHARP_);
+return (function (p1__21687_SHARP_){
+return clojure.walk.prewalk_replace(lvar_bindings,p1__21687_SHARP_);
 });})(cases,lvar_bindings,temp__4655__auto__,case$,temp__4657__auto__))
 ,cljs.core.cst$kw$goals.cljs$core$IFn$_invoke$arity$1(case$));
 if(cljs.core.every_QMARK_(((function (cases,subgoals,lvar_bindings,temp__4655__auto__,case$,temp__4657__auto__){
-return (function (p1__22187_SHARP_){
-return riffle$engine$prove(p1__22187_SHARP_,bwds);
+return (function (p1__21688_SHARP_){
+return riffle$engine$prove(p1__21688_SHARP_,bwds);
 });})(cases,subgoals,lvar_bindings,temp__4655__auto__,case$,temp__4657__auto__))
 ,subgoals)){
 return lvar_bindings;
@@ -164,8 +164,8 @@ return null;
 }
 }
 } else {
-var G__22188 = cljs.core.rest(cases);
-cases = G__22188;
+var G__21689 = cljs.core.rest(cases);
+cases = G__21689;
 continue;
 }
 } else {
@@ -195,15 +195,15 @@ return null;
  */
 riffle.engine.possible_applications = (function riffle$engine$possible_applications(rule,state){
 var partial_matches = cljs.core.reduce.cljs$core$IFn$_invoke$arity$3((function (partial_matches,premise){
-return cljs.core.mapcat.cljs$core$IFn$_invoke$arity$variadic((function (p1__22189_SHARP_){
-return riffle.engine.match_pred(p1__22189_SHARP_,premise,cljs.core.cst$kw$facts.cljs$core$IFn$_invoke$arity$1(state));
+return cljs.core.mapcat.cljs$core$IFn$_invoke$arity$variadic((function (p1__21690_SHARP_){
+return riffle.engine.match_pred(p1__21690_SHARP_,premise,cljs.core.cst$kw$facts.cljs$core$IFn$_invoke$arity$1(state));
 }),cljs.core.array_seq([partial_matches], 0));
 }),new cljs.core.PersistentVector(null, 1, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.PersistentArrayMap(null, 3, [cljs.core.cst$kw$rule,rule,cljs.core.cst$kw$bindings,cljs.core.PersistentArrayMap.EMPTY,cljs.core.cst$kw$facts,cljs.core.PersistentVector.EMPTY], null)], null),cljs.core.into.cljs$core$IFn$_invoke$arity$2(cljs.core.cst$kw$consume.cljs$core$IFn$_invoke$arity$1(rule),cljs.core.cst$kw$check_DASH_pred.cljs$core$IFn$_invoke$arity$1(rule)));
 var partial_matches__$1 = cljs.core.reduce.cljs$core$IFn$_invoke$arity$3(((function (partial_matches){
 return (function (partial_matches__$1,premise){
 return cljs.core.filter.cljs$core$IFn$_invoke$arity$2(cljs.core.identity,cljs.core.map.cljs$core$IFn$_invoke$arity$2(((function (partial_matches){
-return (function (p1__22190_SHARP_){
-return riffle.engine.test_bwd(p1__22190_SHARP_,premise,cljs.core.cst$kw$bwds.cljs$core$IFn$_invoke$arity$1(state));
+return (function (p1__21691_SHARP_){
+return riffle.engine.test_bwd(p1__21691_SHARP_,premise,cljs.core.cst$kw$bwds.cljs$core$IFn$_invoke$arity$1(state));
 });})(partial_matches))
 ,partial_matches__$1));
 });})(partial_matches))
@@ -216,16 +216,16 @@ return partial_matches__$1;
 riffle.engine.possible_transitions = (function riffle$engine$possible_transitions(state){
 var stage = riffle.engine.current_stage(state);
 var rule_applications = cljs.core.vec(cljs.core.mapcat.cljs$core$IFn$_invoke$arity$variadic(((function (stage){
-return (function (p1__22191_SHARP_){
-return riffle.engine.possible_applications(p1__22191_SHARP_,state);
+return (function (p1__21692_SHARP_){
+return riffle.engine.possible_applications(p1__21692_SHARP_,state);
 });})(stage))
 ,cljs.core.array_seq([cljs.core.cst$kw$rules.cljs$core$IFn$_invoke$arity$1(stage)], 0)));
 if(cljs.core.seq(rule_applications)){
 return rule_applications;
 } else {
 var quiescence_rule_applications = cljs.core.vec(cljs.core.mapcat.cljs$core$IFn$_invoke$arity$variadic(((function (stage,rule_applications){
-return (function (p1__22192_SHARP_){
-return riffle.engine.possible_applications(p1__22192_SHARP_,state);
+return (function (p1__21693_SHARP_){
+return riffle.engine.possible_applications(p1__21693_SHARP_,state);
 });})(stage,rule_applications))
 ,cljs.core.array_seq([cljs.core.cst$kw$quiescence_DASH_rules.cljs$core$IFn$_invoke$arity$1(stage)], 0)));
 if(cljs.core.seq(quiescence_rule_applications)){
@@ -244,8 +244,8 @@ var rule = cljs.core.cst$kw$rule.cljs$core$IFn$_invoke$arity$1(transition);
 var state_SINGLEQUOTE_ = cljs.core.dissoc.cljs$core$IFn$_invoke$arity$2(state,cljs.core.cst$kw$choices);
 var consumed_facts = cljs.core.first(cljs.core.split_at(cljs.core.count(cljs.core.cst$kw$consume.cljs$core$IFn$_invoke$arity$1(rule)),cljs.core.cst$kw$facts.cljs$core$IFn$_invoke$arity$1(transition)));
 var state_SINGLEQUOTE___$1 = cljs.core.reduce.cljs$core$IFn$_invoke$arity$3(((function (rule,state_SINGLEQUOTE_,consumed_facts){
-return (function (p1__22193_SHARP_,p2__22194_SHARP_){
-return cljs.core.update.cljs$core$IFn$_invoke$arity$4(p1__22193_SHARP_,cljs.core.cst$kw$facts,cljs.core.dissoc,cljs.core.cst$kw$id.cljs$core$IFn$_invoke$arity$1(p2__22194_SHARP_));
+return (function (p1__21694_SHARP_,p2__21695_SHARP_){
+return cljs.core.update.cljs$core$IFn$_invoke$arity$4(p1__21694_SHARP_,cljs.core.cst$kw$facts,cljs.core.dissoc,cljs.core.cst$kw$id.cljs$core$IFn$_invoke$arity$1(p2__21695_SHARP_));
 });})(rule,state_SINGLEQUOTE_,consumed_facts))
 ,state_SINGLEQUOTE_,consumed_facts);
 var next_fact_id = (cljs.core.apply.cljs$core$IFn$_invoke$arity$2(cljs.core.max,cljs.core.keys(cljs.core.cst$kw$facts.cljs$core$IFn$_invoke$arity$1(state))) + (1));
@@ -255,31 +255,31 @@ return new cljs.core.PersistentArrayMap(null, 2, [cljs.core.cst$kw$id,(next_fact
 });})(rule,state_SINGLEQUOTE_,consumed_facts,state_SINGLEQUOTE___$1,next_fact_id))
 ,cljs.core.range.cljs$core$IFn$_invoke$arity$0(),clojure.walk.prewalk_replace(cljs.core.cst$kw$bindings.cljs$core$IFn$_invoke$arity$1(transition),cljs.core.cst$kw$results.cljs$core$IFn$_invoke$arity$1(rule)));
 var state_SINGLEQUOTE___$2 = cljs.core.reduce.cljs$core$IFn$_invoke$arity$3(((function (rule,state_SINGLEQUOTE_,consumed_facts,state_SINGLEQUOTE___$1,next_fact_id,new_facts){
-return (function (p1__22195_SHARP_,p2__22196_SHARP_){
-return cljs.core.assoc_in(p1__22195_SHARP_,new cljs.core.PersistentVector(null, 2, 5, cljs.core.PersistentVector.EMPTY_NODE, [cljs.core.cst$kw$facts,cljs.core.cst$kw$id.cljs$core$IFn$_invoke$arity$1(p2__22196_SHARP_)], null),p2__22196_SHARP_);
+return (function (p1__21696_SHARP_,p2__21697_SHARP_){
+return cljs.core.assoc_in(p1__21696_SHARP_,new cljs.core.PersistentVector(null, 2, 5, cljs.core.PersistentVector.EMPTY_NODE, [cljs.core.cst$kw$facts,cljs.core.cst$kw$id.cljs$core$IFn$_invoke$arity$1(p2__21697_SHARP_)], null),p2__21697_SHARP_);
 });})(rule,state_SINGLEQUOTE_,consumed_facts,state_SINGLEQUOTE___$1,next_fact_id,new_facts))
 ,state_SINGLEQUOTE___$1,new_facts);
 var stage_SINGLEQUOTE_ = cljs.core.cst$kw$goto.cljs$core$IFn$_invoke$arity$1(rule);
-var state_SINGLEQUOTE___$3 = (function (){var G__22200 = state_SINGLEQUOTE___$2;
+var state_SINGLEQUOTE___$3 = (function (){var G__21701 = state_SINGLEQUOTE___$2;
 if(cljs.core.truth_(stage_SINGLEQUOTE_)){
-return cljs.core.assoc.cljs$core$IFn$_invoke$arity$3(G__22200,cljs.core.cst$kw$stage,stage_SINGLEQUOTE_);
+return cljs.core.assoc.cljs$core$IFn$_invoke$arity$3(G__21701,cljs.core.cst$kw$stage,stage_SINGLEQUOTE_);
 } else {
-return G__22200;
+return G__21701;
 }
 })();
-var state_SINGLEQUOTE___$4 = (function (){var G__22201 = state_SINGLEQUOTE___$3;
+var state_SINGLEQUOTE___$4 = (function (){var G__21702 = state_SINGLEQUOTE___$3;
 if(cljs.core.truth_(cljs.core.cst$kw$ending_QMARK_.cljs$core$IFn$_invoke$arity$1(rule))){
-return cljs.core.assoc.cljs$core$IFn$_invoke$arity$3(G__22201,cljs.core.cst$kw$reached_DASH_end_QMARK_,true);
+return cljs.core.assoc.cljs$core$IFn$_invoke$arity$3(G__21702,cljs.core.cst$kw$reached_DASH_end_QMARK_,true);
 } else {
-return G__22201;
+return G__21702;
 }
 })();
 var desc = riffle.engine.description(transition);
-var state_SINGLEQUOTE___$5 = (function (){var G__22202 = state_SINGLEQUOTE___$4;
+var state_SINGLEQUOTE___$5 = (function (){var G__21703 = state_SINGLEQUOTE___$4;
 if(cljs.core.truth_(desc)){
-return cljs.core.update.cljs$core$IFn$_invoke$arity$4(G__22202,cljs.core.cst$kw$content,cljs.core.fnil.cljs$core$IFn$_invoke$arity$2(cljs.core.conj,cljs.core.PersistentVector.EMPTY),desc);
+return cljs.core.update.cljs$core$IFn$_invoke$arity$4(G__21703,cljs.core.cst$kw$content,cljs.core.fnil.cljs$core$IFn$_invoke$arity$2(cljs.core.conj,cljs.core.PersistentVector.EMPTY),desc);
 } else {
-return G__22202;
+return G__21703;
 }
 })();
 return state_SINGLEQUOTE___$5;
@@ -296,21 +296,21 @@ return cljs.core.update.cljs$core$IFn$_invoke$arity$4(state,cljs.core.cst$kw$con
 var transitions = riffle.engine.possible_transitions(state);
 var quiescent_QMARK_ = cljs.core.cst$kw$quiescence_DASH_rule_QMARK_.cljs$core$IFn$_invoke$arity$1(cljs.core.cst$kw$rule.cljs$core$IFn$_invoke$arity$1(cljs.core.first(transitions)));
 var selection_mode = (cljs.core.truth_(quiescent_QMARK_)?cljs.core.cst$kw$random:cljs.core.cst$kw$selection.cljs$core$IFn$_invoke$arity$1(riffle.engine.current_stage(state)));
-var G__22204 = (((selection_mode instanceof cljs.core.Keyword))?selection_mode.fqn:null);
-switch (G__22204) {
+var G__21705 = (((selection_mode instanceof cljs.core.Keyword))?selection_mode.fqn:null);
+switch (G__21705) {
 case "interactive":
 return cljs.core.assoc.cljs$core$IFn$_invoke$arity$3(state,cljs.core.cst$kw$choices,transitions);
 
 break;
 case "ordered":
-var G__22206 = riffle.engine.apply_transition(state,cljs.core.first(transitions));
-state = G__22206;
+var G__21707 = riffle.engine.apply_transition(state,cljs.core.first(transitions));
+state = G__21707;
 continue;
 
 break;
 case "random":
-var G__22207 = riffle.engine.apply_transition(state,cljs.core.rand_nth(transitions));
-state = G__22207;
+var G__21708 = riffle.engine.apply_transition(state,cljs.core.rand_nth(transitions));
+state = G__21708;
 continue;
 
 break;

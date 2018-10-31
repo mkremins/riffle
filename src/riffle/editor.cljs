@@ -1,6 +1,7 @@
 (ns riffle.editor
   (:require [cljs.reader :as reader]
             [clojure.string :as str]
+            [riffle.examples :as examples]
             [riffle.util :as util]))
 
 (defn lookup
@@ -169,7 +170,8 @@
   (js/localStorage.setItem "editor" (pr-str editor)))
 
 (defn init-editor-state! []
-  (or (load-editor-state!) (-> {:programs [] :program nil} create-program)))
+  (or ;(load-editor-state!)
+      {:programs [examples/meetngreet] :program 0}))
 
 ;;; convert editor program format to a format the compiler will accept
 
